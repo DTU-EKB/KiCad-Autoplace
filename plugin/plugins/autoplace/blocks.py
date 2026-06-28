@@ -26,7 +26,16 @@ _FANOUT_LIMIT = 6
 
 
 def detect_blocks(board: Board, max_iters: int = 30) -> dict[str, str]:
-    """Return ref -> block-id. Also writes ``comp.block`` on the board."""
+    """Return ref -> block-id. Also writes ``comp.block`` on the board.
+
+    Prefers the hierarchical schematic sheet each part belongs to (the real
+    functional grouping the designer intended); falls back to net-connectivity
+    clustering for flat single-sheet boards.
+    """
+    sheet_based = detect_blocks_by_sheet(board)
+    if sheet_based is not None:
+        return sheet_based
+
     adj: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     for net, members in board.nets().items():
         if _is_power(net) or len(members) > _FANOUT_LIMIT:
@@ -68,6 +77,27 @@ def detect_blocks(board: Board, max_iters: int = 30) -> dict[str, str]:
         bid = remap[lbl]
         out[ref] = bid
         board.components[ref].block = bid
+    return out
+
+
+def detect_blocks_by_sheet(board: Board):
+    """Group by hierarchical sheet if the board has >=2 real sub-sheets.
+
+    Top-level parts (root sheet ``/``: typically connectors and test points) are
+    pooled into one ``interface`` block. Returns ref->block, or None if the board
+    is effectively single-sheet (then the caller uses net clustering).
+    """
+    subsheets = {c.sheet for c in board.components.values()
+                 if c.sheet and c.sheet != "/"}
+    if len(subsheets) < 2:
+        return None
+    out = {}
+    for ref, c in board.components.items():
+        sh = c.sheet if c.sheet and c.sheet != "/" else "interface"
+        # compact, readable id: strip slashes, lowercase
+        bid = sh.strip("/").replace(" ", "_").lower() or "interface"
+        c.block = bid
+        out[ref] = bid
     return out
 
 

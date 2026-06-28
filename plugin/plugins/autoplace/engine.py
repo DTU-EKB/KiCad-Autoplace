@@ -11,7 +11,8 @@ from __future__ import annotations
 
 import random
 
-from . import anneal, blocks, forcedirected, legalize as legal_mod, metrics
+from . import (anneal, blocks, floorplan as floorplan_mod, forcedirected,
+               legalize as legal_mod, metrics)
 from .model import Board
 
 
@@ -39,11 +40,18 @@ def place(board: Board, *, seed: int = 0, grid: float = 0.5, margin: float = 0.8
     channel_scale = max(0.0, min(1.0, (0.55 - util) / 0.35))
 
     rng = random.Random(seed)
+    # Force-directed finds an excellent global arrangement; keep it for every
+    # board. On hierarchical boards the blocks are the schematic sheets, and a
+    # stronger cohesion term then pulls any stray sheet members back into their
+    # group -- enforcing the sheet layout *without* a rigid floorplan (a rigid
+    # region seed was measured to be worse on both HPWL and crossings).
+    hierarchical = floorplan_mod.is_hierarchical(board)
     forcedirected.seed_positions(board, rng, margin=margin)
     forcedirected.run(board, rng, iters=fd_iters, margin=margin)
     if sa_steps:
         anneal.anneal(board, seed=seed, steps=sa_steps, margin=margin,
-                      channel_scale=channel_scale)
+                      channel_scale=channel_scale,
+                      cohesion_scale=2.5 if hierarchical else 1.0)
     remaining = legal_mod.legalize(board, grid=grid, margin=margin)
 
     after = metrics.summary(board)

@@ -47,12 +47,17 @@ def load_board(path: str) -> tuple[Board, "pcbnew.BOARD"]:
         ref = fp.GetReference()
         bb = fp.GetBoundingBox(False)               # geometry, no text
         cx, cy = _mm(bb.GetCenter().x), _mm(bb.GetCenter().y)
+        try:
+            sheet = fp.GetSheetname() or ""
+        except Exception:
+            sheet = ""
         comp = Component(
             ref=ref,
             w=_mm(bb.GetWidth()), h=_mm(bb.GetHeight()),
             x=cx, y=cy,
             locked=fp.IsLocked(),
             is_connector=_is_connector(fp),
+            sheet=sheet,
         )
         for pad in fp.Pads():
             pp = pad.GetPosition()
@@ -64,6 +69,16 @@ def load_board(path: str) -> tuple[Board, "pcbnew.BOARD"]:
             ))
         board.components[ref] = comp
     return board, pcb
+
+
+def unrouted_count(pcb: "pcbnew.BOARD") -> int:
+    """Number of unrouted ratsnest connections (0 == fully routed)."""
+    pcb.BuildConnectivity()
+    conn = pcb.GetConnectivity()
+    try:
+        return conn.GetUnconnectedCount(True)      # KiCad 8/9/10 signature
+    except TypeError:
+        return conn.GetUnconnectedCount()
 
 
 def apply_placement(board: Board, pcb: "pcbnew.BOARD", out_path: str):

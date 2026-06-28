@@ -33,6 +33,7 @@ class Component:
     rot: int = 0                   # extra rotation vs baseline: 0/90/180/270
     locked: bool = False
     is_connector: bool = False
+    sheet: str = ""                # hierarchical schematic sheet path
     block: str = ""
 
     def pad_world(self, pad: Pad) -> tuple[float, float]:

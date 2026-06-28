@@ -5,11 +5,11 @@ escape local minima (nudge + swap). Cost is evaluated *incrementally* -- only th
 nets and pairs touching the moved component(s) are recomputed -- so thousands of
 moves run in a fraction of a second even on the 131-part system board.
 
-Cost = HPWL(signal) + overlap-area(hard) + connector-edge + block-cohesion.
+Cost = HPWL(signal) + overlap-area(hard) + routing-channel + connector-edge
+       + block-cohesion.
 
-Orientation/rotation moves are intentionally deferred (they touch the model,
-metrics and kicad_io); this pass is translation + swap only and keeps the layout
-overlap-free for the final legalize step.
+Moves: nudge (translate), rotate (0/90/180/270) and swap. Overlap is a hard
+barrier in the cost, and the final legalize step guarantees an overlap-free board.
 """
 from __future__ import annotations
 
@@ -34,11 +34,12 @@ CHANNEL_MM = 2.6          # 1.0 mm track + 2 x 0.8 mm clearance (DTU fiber-laser
 
 class Annealer:
     def __init__(self, board: Board, *, margin: float = 0.8, seed: int = 0,
-                 channel_scale: float = 1.0):
+                 channel_scale: float = 1.0, cohesion_scale: float = 1.0):
         import random
         self.board = board
         self.margin = margin
         self.channel = _Weights.CHANNEL * channel_scale
+        self.cohesion = _Weights.COHESION * cohesion_scale
         self.rng = random.Random(seed)
         self.comps = list(board.components.values())
         self.free = [c for c in self.comps if not c.locked]
@@ -110,12 +111,12 @@ class Annealer:
         for c in subset:
             if c.is_connector:
                 cost += W.EDGE * self._edge_dist(c)
-            cost += W.COHESION * self._cohesion(c)
+            cost += self.cohesion * self._cohesion(c)
         return cost
 
     def _clamp(self, c):
         b, m = self.board, self.margin
-        hw, hh = c.w / 2, c.h / 2
+        hw, hh = c.eff_w / 2, c.eff_h / 2
         c.x = min(max(c.x, b.x0 + hw + m), b.x1 - hw - m)
         c.y = min(max(c.y, b.y0 + hh + m), b.y1 - hh - m)
 
@@ -214,7 +215,7 @@ class Annealer:
         for c in self.comps:
             if c.is_connector:
                 cost += W.EDGE * self._edge_dist(c)
-            cost += W.COHESION * self._cohesion(c)
+            cost += self.cohesion * self._cohesion(c)
         return cost
 
     def _snapshot(self):
@@ -227,7 +228,7 @@ class Annealer:
 
 
 def anneal(board: Board, *, seed: int = 0, steps: int = 6000, margin: float = 0.8,
-           channel_scale: float = 1.0):
-    Annealer(board, margin=margin, seed=seed,
-             channel_scale=channel_scale).run(steps=steps)
+           channel_scale: float = 1.0, cohesion_scale: float = 1.0):
+    Annealer(board, margin=margin, seed=seed, channel_scale=channel_scale,
+             cohesion_scale=cohesion_scale).run(steps=steps)
     return board
