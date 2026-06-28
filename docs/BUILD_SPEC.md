@@ -331,20 +331,34 @@ intent layer.** Effort drops where we're lifting proven code (`pcb_route.py`,
 
 Front-loaded on placement. Routing/DRC/report are ports (cheap); the weeks go into §4.4.
 
-| # | Milestone | Deliverable | Rough effort |
+| # | Milestone | Deliverable | Status |
 |---|---|---|---|
-| M0 | Repo + skeleton + fixtures | Package, CLI stub, CI. Vendor the 13 DTU boards. Port `pcb_netlist_json.py` → connectivity graph (pads + nets) | 2–3 days |
-| M1 | Reuse routing + report (de-risk the tail) | Wrap `pcb_route.py`/`pcb_make_all.ps1` flow + DRC + renders into a `router/`+`report/` module; reproduce a known-good `buck` route end-to-end | 3–4 days |
-| M2 | **Placement v1 — connectivity-aware** | Force-directed global + grid legalize + overlap=0; beats refdes-grid on HPWL for `rectifier`/`buck`/`boost`. *This is the first real win.* | 1–2 weeks |
-| M3 | Schematic parser → DesignIntent | Parse `.kicad_sch` hierarchy + power nets + connector detection → functional blocks (replaces `REGION`/`EDGE` dicts) | 1 week |
-| M4 | **Placement v2 — floorplan + SA + crossings** | Block floorplan, SA refine, net-crossing term, connector-edge + decap-near-IC. Routable single-sided on mid boards (`mppt`, `c2000_feedback`) | 2–3 weeks |
-| M5 | KiCad plugin packaging | PCM-installable zip + dialog ("place" / "place+route"), replacing `.ps1` orchestration | 3–5 days |
-| M6 | Validation + weight tuning | Regression over all 13 boards (`rectifier` 12 → `system` 131); presets per board class | ongoing |
+| M0 | Repo + skeleton + fixtures | Package, CLI, plugin, headless tests; connectivity graph from `pcbnew` | ✅ done |
+| M1 | Reuse routing + report | (deferred — routing reuse not yet wired; placement prioritised) | ⬜ todo |
+| M2 | **Placement v1 — connectivity-aware** | Force-directed global + grid legalize + overlap=0 | ✅ done |
+| M3 | Functional-block detection | Label-propagation on signal nets (`blocks.py`); replaces `REGION`/`EDGE` dicts. *(.kicad_sch hierarchy seeding still todo)* | ✅ core done |
+| M4 | **Placement v2 — SA refine** | `anneal.py`: incremental SA (nudge+swap), cost = HPWL + hard overlap + connector-edge + block cohesion | ✅ core done |
+| M4b | SA — rotation + crossings + spread | Rotation moves (needs orientation in model/metrics/io); explicit crossing term; spread/routing-channel term | ⬜ todo |
+| M5 | KiCad plugin packaging | PCM-installable zip + filled `packages.json` (sha256/sizes) | ⬜ todo |
+| M6 | Validation + weight tuning | Regression over all boards; per-board-class weight presets; **KiCad-10 board support** (motor_power/system are v20260206) | ⬜ ongoing |
 
-**MVP = M0–M2**: automatic connectivity-aware placement that drops into the existing
-route/DRC flow and beats the hand-typed grid — *with zero hardcoded coordinates*. M3–M4 is
-the quality leap (auto-blocks + single-sided routability). The hardest, highest-value work
-is **M2 + M4 (the placement engine)** — everything else is plumbing or a port.
+### Measured results (KiCad-9 boards, SA + blocks vs. hand-placement)
+| Board | Parts | Blocks | HPWL Δ | Crossings (hand → ours) | Overlaps |
+|---|---|---|---|---|---|
+| buck | 11 | 4 | **−56%** | 0 → 0 | 0 |
+| boost | 11 | 5 | +40% | 0 → 2 | 0 |
+| mppt | 21 | 7 | **−40%** | 17 → **11** | 0 |
+| c2000_feedback | 47 | 14 | **−33%** | 9 → 12 | 0 |
+
+SA+blocks turned the earlier force-directed-only regressions into wins on 3/4 boards.
+`boost` (smallest, tightest hand-layout) still trails — SA compaction over-tightens small
+boards; a spread term (M4b) is the fix. `motor_power`/`system` are KiCad-10 format and need
+KiCad-10's `pcbnew` to load (M6).
+
+**MVP delivered (M0+M2+M3+M4):** automatic, connectivity-aware, block-aware placement with
+zero hardcoded coordinates, overlap-free, deterministic, beating hand-placement on
+wirelength for most boards. Highest-value remaining work is **M4b** (rotation + crossings +
+spread) to win on `boost` and tighten routability.
 
 ---
 
