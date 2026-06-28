@@ -32,6 +32,12 @@ def _is_connector(fp) -> bool:
 def load_board(path: str) -> tuple[Board, "pcbnew.BOARD"]:
     """Return (model Board, live pcbnew board). Keep the live board to write back."""
     pcb = pcbnew.LoadBoard(path)
+    if pcb is None:
+        raise RuntimeError(
+            f"KiCad could not load {path!r}. The file is likely saved in a newer "
+            f"KiCad format than this pcbnew ({pcbnew.GetBuildVersion()}). Open it in "
+            f"the matching KiCad version, or run with that version's Python."
+        )
     edge = pcb.GetBoardEdgesBoundingBox()
     board = Board(
         x0=_mm(edge.GetLeft()), y0=_mm(edge.GetTop()),
