@@ -9,10 +9,12 @@ Lock the parts you care about (connectors, mounting holes), press the button, an
 the engine places the rest — minimising wirelength and keeping the board
 single-sided-routable so the existing routing workflow can finish it.
 
-> Status: **0.1.0 / development.** The placement engine (force-directed global +
-> legalize) runs end-to-end on real boards with zero overlaps. Beating a careful
-> hand-placement on structured boards needs the block-floorplan + simulated-
-> annealing work tracked in [`docs/BUILD_SPEC.md`](docs/BUILD_SPEC.md) (M3–M4).
+> Status: **0.1.0 / development.** Pipeline: block detection → force-directed
+> global → simulated-annealing refine → legalize. Runs end-to-end on real boards
+> with zero overlaps and now beats the hand-placement on wirelength for most
+> boards (e.g. buck −56%, mppt −40% with *fewer* crossings, c2000_feedback −33%).
+> Remaining work (see [`docs/BUILD_SPEC.md`](docs/BUILD_SPEC.md)): rotation moves,
+> a spread/routing-channel term, and KiCad-10 board support.
 
 ## Install (KiCad Plugin & Content Manager)
 Go to *Plugin and Content Manager* on the KiCad project screen → *Manage…* beside

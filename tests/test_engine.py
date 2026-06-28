@@ -67,6 +67,24 @@ def test_deterministic():
         assert b1.components[ref].y == b2.components[ref].y
 
 
+def test_blocks_separates_clusters():
+    from autoplace import blocks
+    # Two internally-wired clusters with no signal net between them.
+    b = Board(0, 0, 80, 80)
+    b.components = {
+        "A1": _two_pin("A1", 5, 5, "x1", "x2"),
+        "A2": _two_pin("A2", 9, 5, "x2", "x3"),
+        "A3": _two_pin("A3", 13, 5, "x3", "x1"),
+        "B1": _two_pin("B1", 70, 70, "y1", "y2"),
+        "B2": _two_pin("B2", 66, 70, "y2", "y3"),
+        "B3": _two_pin("B3", 62, 70, "y3", "y1"),
+    }
+    label = blocks.detect_blocks(b)
+    assert label["A1"] == label["A2"] == label["A3"]
+    assert label["B1"] == label["B2"] == label["B3"]
+    assert label["A1"] != label["B1"]
+
+
 def test_all_parts_inside_outline():
     b = _board()
     engine.place(b, seed=3)
