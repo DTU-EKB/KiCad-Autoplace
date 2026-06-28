@@ -25,33 +25,51 @@ class Pad:
 @dataclass
 class Component:
     ref: str
-    w: float                       # bbox width (mm) at current orientation
+    w: float                       # bbox width (mm) at the captured (rot=0) baseline
     h: float                       # bbox height (mm)
     pads: list[Pad] = field(default_factory=list)
     x: float = 0.0                 # bbox-centre position (mm)
     y: float = 0.0
+    rot: int = 0                   # extra rotation vs baseline: 0/90/180/270
     locked: bool = False
     is_connector: bool = False
     block: str = ""
 
     def pad_world(self, pad: Pad) -> tuple[float, float]:
-        return (self.x + pad.ox, self.y + pad.oy)
+        # Matches pcbnew Rotate(centre, +deg): (x, y) -> (y, -x) per 90 deg.
+        ox, oy = pad.ox, pad.oy
+        r = self.rot
+        if r == 90:
+            ox, oy = oy, -ox
+        elif r == 180:
+            ox, oy = -ox, -oy
+        elif r == 270:
+            ox, oy = -oy, ox
+        return (self.x + ox, self.y + oy)
+
+    @property
+    def eff_w(self) -> float:
+        return self.h if self.rot in (90, 270) else self.w
+
+    @property
+    def eff_h(self) -> float:
+        return self.w if self.rot in (90, 270) else self.h
 
     @property
     def left(self) -> float:
-        return self.x - self.w / 2
+        return self.x - self.eff_w / 2
 
     @property
     def right(self) -> float:
-        return self.x + self.w / 2
+        return self.x + self.eff_w / 2
 
     @property
     def top(self) -> float:
-        return self.y - self.h / 2
+        return self.y - self.eff_h / 2
 
     @property
     def bottom(self) -> float:
-        return self.y + self.h / 2
+        return self.y + self.eff_h / 2
 
 
 @dataclass
