@@ -34,12 +34,18 @@ CHANNEL_MM = 2.6          # 1.0 mm track + 2 x 0.8 mm clearance (DTU fiber-laser
 
 class Annealer:
     def __init__(self, board: Board, *, margin: float = 0.8, seed: int = 0,
-                 channel_scale: float = 1.0, cohesion_scale: float = 1.0):
+                 channel_scale: float = 1.0, cohesion_scale: float = 1.0,
+                 anchors=None):
         import random
         self.board = board
         self.margin = margin
         self.channel = _Weights.CHANNEL * channel_scale
         self.cohesion = _Weights.COHESION * cohesion_scale
+        # Fixed per-block cohesion targets (floorplan region centres). When set,
+        # blocks are held in their spread-out regions instead of collapsing toward
+        # a drifting centroid -- this is what keeps a routable layout from
+        # re-compacting under HPWL minimisation.
+        self.anchors = anchors
         self.rng = random.Random(seed)
         self.comps = list(board.components.values())
         self.free = [c for c in self.comps if not c.locked]
@@ -86,7 +92,10 @@ class Annealer:
         return min(c.x - b.x0, b.x1 - c.x, c.y - b.y0, b.y1 - c.y)
 
     def _cohesion(self, c) -> float:
-        cx, cy = self.centroids.get(c.block, (c.x, c.y))
+        if self.anchors is not None:
+            cx, cy = self.anchors.get(c.block, (c.x, c.y))
+        else:
+            cx, cy = self.centroids.get(c.block, (c.x, c.y))
         return math.hypot(c.x - cx, c.y - cy)
 
     def local_cost(self, subset) -> float:
@@ -110,8 +119,9 @@ class Annealer:
                 cost += self._pair_penalty(c, other, self.margin)
         for c in subset:
             if c.is_connector:
-                cost += W.EDGE * self._edge_dist(c)
-            cost += self.cohesion * self._cohesion(c)
+                cost += W.EDGE * self._edge_dist(c)   # to the edge, not the block
+            else:
+                cost += self.cohesion * self._cohesion(c)
         return cost
 
     def _clamp(self, c):
@@ -145,7 +155,7 @@ class Annealer:
                     best_cost = running
                     best = self._snapshot()
             T *= cooling
-            if (it + 1) % resync_every == 0:
+            if self.anchors is None and (it + 1) % resync_every == 0:
                 self.centroids = block_centroids(self.board)
                 running = self._total_cost()      # cohesion target moved
 
@@ -215,7 +225,8 @@ class Annealer:
         for c in self.comps:
             if c.is_connector:
                 cost += W.EDGE * self._edge_dist(c)
-            cost += self.cohesion * self._cohesion(c)
+            else:
+                cost += self.cohesion * self._cohesion(c)
         return cost
 
     def _snapshot(self):
@@ -228,7 +239,7 @@ class Annealer:
 
 
 def anneal(board: Board, *, seed: int = 0, steps: int = 6000, margin: float = 0.8,
-           channel_scale: float = 1.0, cohesion_scale: float = 1.0):
+           channel_scale: float = 1.0, cohesion_scale: float = 1.0, anchors=None):
     Annealer(board, margin=margin, seed=seed, channel_scale=channel_scale,
-             cohesion_scale=cohesion_scale).run(steps=steps)
+             cohesion_scale=cohesion_scale, anchors=anchors).run(steps=steps)
     return board

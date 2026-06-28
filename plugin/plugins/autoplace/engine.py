@@ -17,7 +17,10 @@ from .model import Board
 
 
 def place(board: Board, *, seed: int = 0, grid: float = 0.5, margin: float = 0.8,
-          iters: int = 400, sa_steps: int | None = None) -> dict:
+          iters: int = 400, sa_steps: int | None = None,
+          strategy: str = "auto") -> dict:
+    """strategy: 'auto' (force-directed seed, floorplan only via cohesion),
+    'floorplan' (force the region floorplan seed), 'compact' (force-directed)."""
     before = metrics.summary(board)
 
     block_map = blocks.detect_blocks(board)
@@ -45,13 +48,23 @@ def place(board: Board, *, seed: int = 0, grid: float = 0.5, margin: float = 0.8
     # stronger cohesion term then pulls any stray sheet members back into their
     # group -- enforcing the sheet layout *without* a rigid floorplan (a rigid
     # region seed was measured to be worse on both HPWL and crossings).
+    # Routability (validated with FreeRouting on the 131-part system board) is
+    # driven by SPREAD, not raw wirelength: the compact HPWL-minimal layout routed
+    # 76% while spreading the sheets into regions routed 87%. So hierarchical
+    # boards use the region floorplan by default.
     hierarchical = floorplan_mod.is_hierarchical(board)
-    forcedirected.seed_positions(board, rng, margin=margin)
-    forcedirected.run(board, rng, iters=fd_iters, margin=margin)
+    use_floorplan = strategy == "floorplan" or (strategy == "auto" and hierarchical)
+    anchors = None
+    if use_floorplan:
+        anchors = floorplan_mod.floorplan(board, rng, margin=margin)
+    else:
+        forcedirected.seed_positions(board, rng, margin=margin)
+        forcedirected.run(board, rng, iters=fd_iters, margin=margin)
     if sa_steps:
         anneal.anneal(board, seed=seed, steps=sa_steps, margin=margin,
                       channel_scale=channel_scale,
-                      cohesion_scale=2.5 if hierarchical else 1.0)
+                      cohesion_scale=2.5 if use_floorplan else 1.0,
+                      anchors=anchors)
     remaining = legal_mod.legalize(board, grid=grid, margin=margin)
 
     after = metrics.summary(board)
