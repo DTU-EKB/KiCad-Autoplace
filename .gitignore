@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.autoplaced.kicad_pcb
+*.kicad_pcb-bak
+*-backups/
+build/
+dist/
+*.zip
+!releases/*.zip
+.pytest_cache/
+.venv/

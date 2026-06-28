@@ -1,0 +1,25 @@
+{
+  "$schema": "https://go.kicad.org/pcm/schemas/v2",
+  "name": "DTU EKB Autoplace",
+  "description": "Connectivity-aware automatic PCB component placement.",
+  "description_full": "An automatic PCB placement plugin for KiCad, maintained for students at DTU Ballerup Campus. Places unlocked footprints using a connectivity-aware force-directed engine that minimises wirelength and keeps the layout single-sided-routable, so the existing routing workflow can finish the board. Locked footprints (connectors, mounting holes) stay fixed.",
+  "identifier": "com.github.dtu-ekb.kicad-autoplace",
+  "type": "plugin",
+  "author": {
+    "name": "DTU and EKB Contributors",
+    "contact": {
+      "github": "https://github.com/DTU-EKB/KiCad-Autoplace"
+    }
+  },
+  "license": "MIT",
+  "resources": {
+    "Repository": "https://github.com/DTU-EKB/KiCad-Autoplace"
+  },
+  "versions": [
+    {
+      "version": "0.1.0",
+      "status": "development",
+      "kicad_version": "9.0"
+    }
+  ]
+}

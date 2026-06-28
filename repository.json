@@ -1,0 +1,9 @@
+{
+  "$schema": "https://go.kicad.org/pcm/schemas/v2",
+  "schema_version": 2,
+  "name": "DTU EKB KiCad Addons",
+  "packages": {
+    "url": "https://raw.githubusercontent.com/DTU-EKB/KiCad-Autoplace/main/packages.json",
+    "update_timestamp": 1710000000
+  }
+}
