@@ -18,7 +18,7 @@ def _snap(v: float, grid: float) -> float:
 
 
 def _clamp(c: Component, board: Board, margin: float):
-    hw, hh = c.w / 2, c.h / 2
+    hw, hh = c.eff_w / 2, c.eff_h / 2
     c.x = min(max(c.x, board.x0 + hw + margin), board.x1 - hw - margin)
     c.y = min(max(c.y, board.y0 + hh + margin), board.y1 - hh - margin)
 
@@ -32,8 +32,8 @@ def push_apart(board: Board, *, margin: float = 0.8, iters: int = 200):
             a = comps[i]
             for j in range(i + 1, len(comps)):
                 b = comps[j]
-                ox = (a.w + b.w) / 2 + margin - abs(a.x - b.x)
-                oy = (a.h + b.h) / 2 + margin - abs(a.y - b.y)
+                ox = (a.eff_w + b.eff_w) / 2 + margin - abs(a.x - b.x)
+                oy = (a.eff_h + b.eff_h) / 2 + margin - abs(a.y - b.y)
                 if ox <= 0 or oy <= 0:
                     continue
                 moved = True

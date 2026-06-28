@@ -10,11 +10,12 @@ the engine places the rest — minimising wirelength and keeping the board
 single-sided-routable so the existing routing workflow can finish it.
 
 > Status: **0.1.0 / development.** Pipeline: block detection → force-directed
-> global → simulated-annealing refine → legalize. Runs end-to-end on real boards
-> with zero overlaps and now beats the hand-placement on wirelength for most
-> boards (e.g. buck −56%, mppt −40% with *fewer* crossings, c2000_feedback −33%).
-> Remaining work (see [`docs/BUILD_SPEC.md`](docs/BUILD_SPEC.md)): rotation moves,
-> a spread/routing-channel term, and KiCad-10 board support.
+> global → simulated-annealing refine (translate / rotate / swap) → legalize.
+> Runs on **KiCad 9 and 10** boards, always overlap-free, and beats the
+> hand-placement on wirelength *and* crossings for most boards (mppt −56% /
+> crossings 17→6, current_sense −56% / 10→3, feedback_circuit −69% / 22→1,
+> system −36% / 438→272). See [`docs/BUILD_SPEC.md`](docs/BUILD_SPEC.md) §7 for the
+> full table and the known weak case (`motor_power`, a dense spacious board).
 
 ## Install (KiCad Plugin & Content Manager)
 Go to *Plugin and Content Manager* on the KiCad project screen → *Manage…* beside

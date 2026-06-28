@@ -67,14 +67,22 @@ def load_board(path: str) -> tuple[Board, "pcbnew.BOARD"]:
 
 
 def apply_placement(board: Board, pcb: "pcbnew.BOARD", out_path: str):
-    """Translate each footprint to its computed centre and save to out_path."""
+    """Apply each footprint's computed rotation + centre and save to out_path.
+
+    Rotation is applied about the footprint's bounding-box centre first (so the
+    model's rotated pad offsets match the board exactly -- verified against
+    pcbnew's Rotate(+deg): (x, y) -> (y, -x)), then the part is translated so its
+    bbox centre lands on the computed position.
+    """
     by_ref = {fp.GetReference(): fp for fp in pcb.GetFootprints()}
     for ref, comp in board.components.items():
         fp = by_ref.get(ref)
         if fp is None:
             continue
-        bb = fp.GetBoundingBox(False)
-        cur = bb.GetCenter()
+        if comp.rot:
+            centre = fp.GetBoundingBox(False).GetCenter()
+            fp.Rotate(centre, pcbnew.EDA_ANGLE(comp.rot, pcbnew.DEGREES_T))
+        cur = fp.GetBoundingBox(False).GetCenter()
         dx = pcbnew.FromMM(comp.x) - cur.x
         dy = pcbnew.FromMM(comp.y) - cur.y
         if dx or dy:

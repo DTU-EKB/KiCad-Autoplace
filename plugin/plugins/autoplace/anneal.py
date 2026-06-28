@@ -25,13 +25,20 @@ class _Weights:
     OVERLAP = 60.0        # per mm^2 of courtyard overlap -- effectively a barrier
     EDGE = 0.6            # connector distance to nearest edge
     COHESION = 0.35       # component distance to its block centroid
+    CHANNEL = 4.0         # soft penalty for gaps narrower than a routing channel
+
+
+# Desired clear gap between courtyards so the router has a channel (mm).
+CHANNEL_MM = 2.6          # 1.0 mm track + 2 x 0.8 mm clearance (DTU fiber-laser DR)
 
 
 class Annealer:
-    def __init__(self, board: Board, *, margin: float = 0.8, seed: int = 0):
+    def __init__(self, board: Board, *, margin: float = 0.8, seed: int = 0,
+                 channel_scale: float = 1.0):
         import random
         self.board = board
         self.margin = margin
+        self.channel = _Weights.CHANNEL * channel_scale
         self.rng = random.Random(seed)
         self.comps = list(board.components.values())
         self.free = [c for c in self.comps if not c.locked]
@@ -55,13 +62,23 @@ class Annealer:
         ys = [p[1] for p in pts]
         return (max(xs) - min(xs)) + (max(ys) - min(ys))
 
-    @staticmethod
-    def _overlap_area(a, b, margin) -> float:
-        ox = (a.w + b.w) / 2 + margin - abs(a.x - b.x)
-        oy = (a.h + b.h) / 2 + margin - abs(a.y - b.y)
-        if ox > 0 and oy > 0:
-            return ox * oy
-        return 0.0
+    def _pair_penalty(self, a, b, margin) -> float:
+        """Hard overlap area (barrier) + soft channel penalty for tight gaps."""
+        # gap between courtyards along each axis (negative => overlapping)
+        gx = abs(a.x - b.x) - (a.eff_w + b.eff_w) / 2
+        gy = abs(a.y - b.y) - (a.eff_h + b.eff_h) / 2
+        ox = margin - gx
+        oy = margin - gy
+        cost = 0.0
+        if ox > 0 and oy > 0:                          # boxes overlap
+            cost += _Weights.OVERLAP * ox * oy
+        # channel: penalise when the nearer-axis gap is below CHANNEL_MM and the
+        # boxes shadow each other on the other axis (a real routing pinch point)
+        gap = max(gx, gy)
+        shadow = min(gx, gy) < margin
+        if self.channel and shadow and 0 <= gap < CHANNEL_MM:
+            cost += self.channel * (CHANNEL_MM - gap)
+        return cost
 
     def _edge_dist(self, c) -> float:
         b = self.board
@@ -89,7 +106,7 @@ class Annealer:
                 if key in seen:
                     continue
                 seen.add(key)
-                cost += W.OVERLAP * self._overlap_area(c, other, self.margin)
+                cost += self._pair_penalty(c, other, self.margin)
         for c in subset:
             if c.is_connector:
                 cost += W.EDGE * self._edge_dist(c)
@@ -114,8 +131,11 @@ class Annealer:
         resync_every = max(200, steps // 20)
 
         for it in range(steps):
-            if self.rng.random() < 0.65:
+            roll = self.rng.random()
+            if roll < 0.55:
                 delta = self._try_nudge(T)
+            elif roll < 0.80:
+                delta = self._try_rotate(T)
             else:
                 delta = self._try_swap()
             if delta is not None:
@@ -140,6 +160,20 @@ class Annealer:
         self._clamp(c)
         after = self.local_cost((c,))
         return self._accept(after - before, T, lambda: self._revert1(c, ox, oy))
+
+    def _try_rotate(self, T):
+        c = self.rng.choice(self.free)
+        old_rot = c.rot
+        before = self.local_cost((c,))
+        c.rot = self.rng.choice([r for r in (0, 90, 180, 270) if r != old_rot])
+        self._clamp(c)                       # eff dims changed -> re-clamp
+        after = self.local_cost((c,))
+        return self._accept(after - before, T,
+                            lambda: self._revert_rot(c, old_rot))
+
+    @staticmethod
+    def _revert_rot(c, old_rot):
+        c.rot = old_rot
 
     def _try_swap(self):
         if len(self.free) < 2:
@@ -175,7 +209,7 @@ class Annealer:
         cost = sum(W.HPWL * self._net_hpwl(n) for n in self.net_members)
         for i in range(len(self.comps)):
             for j in range(i + 1, len(self.comps)):
-                cost += W.OVERLAP * self._overlap_area(
+                cost += self._pair_penalty(
                     self.comps[i], self.comps[j], self.margin)
         for c in self.comps:
             if c.is_connector:
@@ -184,14 +218,16 @@ class Annealer:
         return cost
 
     def _snapshot(self):
-        return {c.ref: (c.x, c.y) for c in self.free}
+        return {c.ref: (c.x, c.y, c.rot) for c in self.free}
 
     def _restore(self, snap):
-        for ref, (x, y) in snap.items():
+        for ref, (x, y, rot) in snap.items():
             c = self.board.components[ref]
-            c.x, c.y = x, y
+            c.x, c.y, c.rot = x, y, rot
 
 
-def anneal(board: Board, *, seed: int = 0, steps: int = 6000, margin: float = 0.8):
-    Annealer(board, margin=margin, seed=seed).run(steps=steps)
+def anneal(board: Board, *, seed: int = 0, steps: int = 6000, margin: float = 0.8,
+           channel_scale: float = 1.0):
+    Annealer(board, margin=margin, seed=seed,
+             channel_scale=channel_scale).run(steps=steps)
     return board

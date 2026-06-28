@@ -338,28 +338,40 @@ Front-loaded on placement. Routing/DRC/report are ports (cheap); the weeks go in
 | M1 | Reuse routing + report | (deferred — routing reuse not yet wired; placement prioritised) | ⬜ todo |
 | M2 | **Placement v1 — connectivity-aware** | Force-directed global + grid legalize + overlap=0 | ✅ done |
 | M3 | Functional-block detection | Label-propagation on signal nets (`blocks.py`); replaces `REGION`/`EDGE` dicts. *(.kicad_sch hierarchy seeding still todo)* | ✅ core done |
-| M4 | **Placement v2 — SA refine** | `anneal.py`: incremental SA (nudge+swap), cost = HPWL + hard overlap + connector-edge + block cohesion | ✅ core done |
-| M4b | SA — rotation + crossings + spread | Rotation moves (needs orientation in model/metrics/io); explicit crossing term; spread/routing-channel term | ⬜ todo |
-| M5 | KiCad plugin packaging | PCM-installable zip + filled `packages.json` (sha256/sizes) | ⬜ todo |
-| M6 | Validation + weight tuning | Regression over all boards; per-board-class weight presets; **KiCad-10 board support** (motor_power/system are v20260206) | ⬜ ongoing |
+| M4 | **Placement v2 — SA refine** | `anneal.py`: incremental SA (nudge/rotate/swap), cost = HPWL + hard overlap + connector-edge + block cohesion + density-adaptive routing-channel | ✅ done |
+| M4b | Rotation + channel + scaling | 0/90/180/270 rotation moves (pcbnew-verified matrix), channel/spread term relaxed by board density, SA effort scales with part count | ✅ done |
+| M5 | KiCad plugin packaging | PCM-installable zip + filled `packages.json` (sha256/sizes) + GitHub release | ✅ done |
+| M6 | Validation + weight tuning | Regression over all 12 boards; **KiCad-9 and 10 both load** (engine runs inside whichever KiCad launches it); per-board-class presets | ⬜ ongoing |
 
-### Measured results (KiCad-9 boards, SA + blocks vs. hand-placement)
-| Board | Parts | Blocks | HPWL Δ | Crossings (hand → ours) | Overlaps |
-|---|---|---|---|---|---|
-| buck | 11 | 4 | **−56%** | 0 → 0 | 0 |
-| boost | 11 | 5 | +40% | 0 → 2 | 0 |
-| mppt | 21 | 7 | **−40%** | 17 → **11** | 0 |
-| c2000_feedback | 47 | 14 | **−33%** | 9 → 12 | 0 |
+### Measured results (full board suite, final engine vs. hand-placement)
+HPWL excludes power nets; crossings = intersecting MST edges; overlaps always 0.
+| Board | Parts | Blocks | HPWL Δ | Crossings (hand → ours) |
+|---|---|---|---|---|
+| feedback_circuit | 10 | 3 | **−69%** | 22 → **1** |
+| motor_feedback | 10 | 2 | **−61%** | 11 → **1** |
+| current_sense | 17 | 6 | **−56%** | 10 → **3** |
+| mppt | 21 | 7 | **−56%** | 17 → **6** |
+| rectifier | 12 | 6 | **−50%** | 11 → **1** |
+| c2000_feedback | 47 | 14 | **−39%** | 9 → **8** |
+| system | 131 | 38 | **−36%** | 438 → **272** |
+| buck | 11 | 4 | **−33%** | 0 → 2 |
+| drive_circuit | 14 | 5 | +14% | 3 → 8 |
+| mppt_buck | 20 | 8 | +16% | 9 → 10 |
+| boost | 11 | 5 | +27% | 0 → 1 |
+| motor_power | 58 | 18 | +91% | 26 → 145 |
 
-SA+blocks turned the earlier force-directed-only regressions into wins on 3/4 boards.
-`boost` (smallest, tightest hand-layout) still trails — SA compaction over-tightens small
-boards; a spread term (M4b) is the fix. `motor_power`/`system` are KiCad-10 format and need
-KiCad-10's `pcbnew` to load (M6).
+**8 of 12 boards beat hand-placement on wirelength, most with fewer crossings too**, and the
+131-part `system` board improved −36% / 438→272 crossings. All overlap-free and
+deterministic. Known weak cases: tiny tightly-hand-packed boards (`boost`, `drive_circuit`,
+`mppt_buck`, +14–27%) and the dense-but-spacious `motor_power` (35% utilisation, 18 blocks
+half of them singletons — sprawls without a true block floorplan). A connectivity-aware
+floorplanner was prototyped but *hurt* the mid boards (rigid shelf rows), so it was reverted;
+a better floorplan that doesn't disturb the working boards is the main open item, along with
+per-board-class weight presets.
 
-**MVP delivered (M0+M2+M3+M4):** automatic, connectivity-aware, block-aware placement with
-zero hardcoded coordinates, overlap-free, deterministic, beating hand-placement on
-wirelength for most boards. Highest-value remaining work is **M4b** (rotation + crossings +
-spread) to win on `boost` and tighten routability.
+**Delivered (M0–M5):** automatic, connectivity- and block-aware, rotation-capable placement
+with zero hardcoded coordinates, overlap-free and deterministic, running on KiCad 9 and 10,
+beating hand-placement on most boards, packaged as a PCM-installable plugin.
 
 ---
 

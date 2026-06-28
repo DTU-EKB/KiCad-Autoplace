@@ -16,7 +16,7 @@ from .model import Board, Component
 
 
 def _clamp_to_board(c: Component, board: Board, margin: float):
-    half_w, half_h = c.w / 2, c.h / 2
+    half_w, half_h = c.eff_w / 2, c.eff_h / 2
     c.x = min(max(c.x, board.x0 + half_w + margin), board.x1 - half_w - margin)
     c.y = min(max(c.y, board.y0 + half_h + margin), board.y1 - half_h - margin)
 
@@ -91,8 +91,8 @@ def run(board: Board, rng, *, iters: int = 400, k_spring: float = 0.04,
                 b = comps[j]
                 dx = a.x - b.x
                 dy = a.y - b.y
-                min_x = (a.w + b.w) / 2 + margin
-                min_y = (a.h + b.h) / 2 + margin
+                min_x = (a.eff_w + b.eff_w) / 2 + margin
+                min_y = (a.eff_h + b.eff_h) / 2 + margin
                 ox = min_x - abs(dx)
                 oy = min_y - abs(dy)
                 if ox > 0 and oy > 0:                  # boxes (near-)overlap
