@@ -4,9 +4,10 @@ An open, KiCad-focused equivalent of [AutoCuro](https://autocuro.com/): automate
 schematic-aware **component placement + routing** that runs locally and outputs a
 native `.kicad_pcb` file.
 
-Status: design spec (no code yet)
-Target EDA: **KiCad 9** only
+Status: implemented through M4 (block detection + SA placement) — see §7 for results
+Target EDA: **KiCad 9** only (KiCad-10 board format support is M6)
 Platform: Windows (primary), Linux (CI)
+Repo: https://github.com/DTU-EKB/KiCad-Autoplace
 
 ---
 
