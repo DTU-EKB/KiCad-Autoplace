@@ -85,3 +85,171 @@
 2026-06-28 22:46:01.902 [Thread-22] WARN  FloatLine: Parameter is null
 2026-06-28 22:46:02.394 [Thread-22] INFO  Route optimization was completed in 8.21 seconds and it improved the design by ~51.30%.
 2026-06-28 22:46:02.420 [Thread-22] INFO  Saving 'C:/Users/Mads2/AppData/Local/Temp/claude/C--Users-Mads2-personal-projects/6c7ff437-1f0d-40ac-9d1c-bbde1b01798e/scratchpad/buck.autoplaced.ses'...
+2026-06-28 22:47:08.368 [main] INFO  Freerouting v1.9.0 (build-date: 2023-10-30)
+2026-06-28 22:47:08.459 [main] INFO  Settings were loaded from freerouting.json
+2026-06-28 22:47:10.313 [main] INFO  Opening 'C:/Users/Mads2/AppData/Local/Temp/claude/C--Users-Mads2-personal-projects/6c7ff437-1f0d-40ac-9d1c-bbde1b01798e/scratchpad/system.autoplaced.dsn'...
+2026-06-28 22:47:10.932 [ForkJoinPool.commonPool-worker-1] INFO  New version available: v2.2.4
+2026-06-28 22:47:34.838 [Thread-22] INFO  Starting auto-routing...
+2026-06-28 22:48:05.561 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.562 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.586 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.587 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.612 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.613 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.635 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.636 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.665 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.666 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.695 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.696 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.721 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.722 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.746 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.747 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.776 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.777 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.799 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.800 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.824 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.825 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.844 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.845 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.867 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.868 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.884 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.885 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.904 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.905 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.921 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.922 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.942 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.943 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.959 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.960 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.982 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:05.983 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.002 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.003 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.029 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.029 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.045 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.046 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.067 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.068 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.085 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.085 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.108 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.109 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.125 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.126 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.141 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.143 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.160 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.161 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.182 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.183 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.195 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.196 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.211 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.212 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.226 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.226 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.247 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.248 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.260 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.261 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.279 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.280 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.293 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.294 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.313 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.314 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.327 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.328 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.347 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.347 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.359 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.360 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.378 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.379 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.394 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.394 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.415 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.416 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.431 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:48:06.432 [Thread-22] WARN  offset_shapes: shape is empty
+2026-06-28 22:51:53.335 [Thread-22] INFO  Auto-routing was completed in 4 minute(s) 18.49 seconds.
+2026-06-28 22:51:53.437 [Thread-22] INFO  Starting route optimization on 1 thread...
+2026-06-28 22:52:05.999 [Thread-22] INFO  Route optimization was completed in 12.56 seconds.
+2026-06-28 22:52:06.019 [Thread-22] INFO  Saving 'C:/Users/Mads2/AppData/Local/Temp/claude/C--Users-Mads2-personal-projects/6c7ff437-1f0d-40ac-9d1c-bbde1b01798e/scratchpad/system.autoplaced.ses'...
+2026-06-28 22:52:58.122 [main] INFO  Freerouting v1.9.0 (build-date: 2023-10-30)
+2026-06-28 22:52:58.221 [main] INFO  Settings were loaded from freerouting.json
+2026-06-28 22:52:59.744 [main] INFO  Opening 'C:/Users/Mads2/AppData/Local/Temp/claude/C--Users-Mads2-personal-projects/6c7ff437-1f0d-40ac-9d1c-bbde1b01798e/scratchpad/system_hand.dsn'...
+2026-06-28 22:53:00.320 [ForkJoinPool.commonPool-worker-1] INFO  New version available: v2.2.4
+2026-06-28 22:53:22.720 [Thread-23] INFO  Starting auto-routing...
+2026-06-28 22:53:38.441 [Thread-23] INFO  Auto-routing was completed in 15.72 seconds.
+2026-06-28 22:53:38.544 [Thread-23] INFO  Starting route optimization on 1 thread...
+2026-06-28 23:00:35.819 [Thread-23] INFO  Route optimization was completed in 6 minute(s) 57.27 seconds and it improved the design by ~51.09%.
+2026-06-28 23:00:35.836 [Thread-23] INFO  Saving 'C:/Users/Mads2/AppData/Local/Temp/claude/C--Users-Mads2-personal-projects/6c7ff437-1f0d-40ac-9d1c-bbde1b01798e/scratchpad/system_hand.ses'...
+2026-06-28 23:01:15.568 [main] INFO  Freerouting v1.9.0 (build-date: 2023-10-30)
+2026-06-28 23:01:15.665 [main] INFO  Settings were loaded from freerouting.json
+2026-06-28 23:01:17.309 [main] INFO  Opening 'C:/Users/Mads2/AppData/Local/Temp/claude/C--Users-Mads2-personal-projects/6c7ff437-1f0d-40ac-9d1c-bbde1b01798e/scratchpad/system_fp.dsn'...
+2026-06-28 23:01:17.915 [ForkJoinPool.commonPool-worker-1] INFO  New version available: v2.2.4
+2026-06-28 23:01:42.196 [Thread-22] INFO  Starting auto-routing...
+2026-06-28 23:04:32.586 [Thread-22] INFO  Auto-routing was completed in 2 minute(s) 50.39 seconds.
+2026-06-28 23:04:32.688 [Thread-22] INFO  Starting route optimization on 1 thread...
+2026-06-28 23:04:47.181 [Thread-22] INFO  Route optimization was completed in 14.49 seconds.
+2026-06-28 23:04:47.210 [Thread-22] INFO  Saving 'C:/Users/Mads2/AppData/Local/Temp/claude/C--Users-Mads2-personal-projects/6c7ff437-1f0d-40ac-9d1c-bbde1b01798e/scratchpad/system_fp.ses'...
+2026-06-28 23:08:49.137 [main] INFO  Freerouting v1.9.0 (build-date: 2023-10-30)
+2026-06-28 23:08:49.236 [main] INFO  Settings were loaded from freerouting.json
+2026-06-28 23:08:50.944 [main] INFO  Opening 'C:/Users/Mads2/AppData/Local/Temp/claude/C--Users-Mads2-personal-projects/6c7ff437-1f0d-40ac-9d1c-bbde1b01798e/scratchpad/system_fp2.dsn'...
+2026-06-28 23:08:51.597 [ForkJoinPool.commonPool-worker-1] INFO  New version available: v2.2.4
+2026-06-28 23:09:15.474 [Thread-22] INFO  Starting auto-routing...
+2026-06-28 23:12:12.584 [Thread-22] WARN  IntPoint: p_y is out of range
+2026-06-28 23:12:12.585 [Thread-22] WARN  IntPoint: p_y is out of range
+2026-06-28 23:12:12.585 [Thread-22] WARN  IntPoint: p_x is out of range
+2026-06-28 23:12:12.586 [Thread-22] WARN  IntPoint: p_x is out of range
+2026-06-28 23:12:12.586 [Thread-22] WARN  IntPoint: p_x is out of range
+2026-06-28 23:12:12.587 [Thread-22] WARN  IntPoint: p_x is out of range
+2026-06-28 23:12:12.588 [Thread-22] WARN  ShapeSearchTree.overlaps_with_clearance: p_shape is not bounded
+2026-06-28 23:12:12.590 [Thread-22] WARN  IntPoint: p_y is out of range
+2026-06-28 23:12:12.590 [Thread-22] WARN  IntPoint: p_y is out of range
+2026-06-28 23:12:12.591 [Thread-22] WARN  IntPoint: p_x is out of range
+2026-06-28 23:12:12.591 [Thread-22] WARN  IntPoint: p_x is out of range
+2026-06-28 23:12:12.592 [Thread-22] WARN  IntPoint: p_x is out of range
+2026-06-28 23:12:12.592 [Thread-22] WARN  IntPoint: p_x is out of range
+2026-06-28 23:12:12.594 [Thread-22] WARN  IntPoint: p_y is out of range
+2026-06-28 23:12:12.595 [Thread-22] WARN  IntPoint: p_y is out of range
+2026-06-28 23:12:12.596 [Thread-22] WARN  IntPoint: p_x is out of range
+2026-06-28 23:12:12.596 [Thread-22] WARN  IntPoint: p_x is out of range
+2026-06-28 23:12:12.597 [Thread-22] WARN  IntPoint: p_x is out of range
+2026-06-28 23:12:12.597 [Thread-22] WARN  IntPoint: p_x is out of range
+2026-06-28 23:12:12.598 [Thread-22] WARN  IntPoint: p_x is out of range
+2026-06-28 23:12:12.598 [Thread-22] WARN  IntPoint: p_y is out of range
+2026-06-28 23:12:12.600 [Thread-22] WARN  IntPoint: p_y is out of range
+2026-06-28 23:12:12.601 [Thread-22] WARN  IntPoint: p_y is out of range
+2026-06-28 23:12:12.601 [Thread-22] WARN  IntPoint: p_x is out of range
+2026-06-28 23:12:12.602 [Thread-22] WARN  IntPoint: p_x is out of range
+2026-06-28 23:12:12.603 [Thread-22] WARN  IntPoint: p_x is out of range
+2026-06-28 23:12:12.603 [Thread-22] WARN  IntPoint: p_x is out of range
+2026-06-28 23:12:12.604 [Thread-22] WARN  ShapeSearchTree.overlaps_with_clearance: p_shape is not bounded
+2026-06-28 23:12:12.606 [Thread-22] WARN  IntPoint: p_y is out of range
+2026-06-28 23:12:12.606 [Thread-22] WARN  IntPoint: p_y is out of range
+2026-06-28 23:12:12.607 [Thread-22] WARN  IntPoint: p_x is out of range
+2026-06-28 23:12:12.608 [Thread-22] WARN  IntPoint: p_x is out of range
+2026-06-28 23:12:12.608 [Thread-22] WARN  IntPoint: p_x is out of range
+2026-06-28 23:12:12.608 [Thread-22] WARN  IntPoint: p_x is out of range
+2026-06-28 23:12:12.610 [Thread-22] WARN  IntPoint: p_y is out of range
+2026-06-28 23:12:12.611 [Thread-22] WARN  IntPoint: p_y is out of range
+2026-06-28 23:12:12.612 [Thread-22] WARN  IntPoint: p_x is out of range
+2026-06-28 23:12:12.612 [Thread-22] WARN  IntPoint: p_x is out of range
+2026-06-28 23:12:12.613 [Thread-22] WARN  IntPoint: p_x is out of range
+2026-06-28 23:12:12.614 [Thread-22] WARN  IntPoint: p_x is out of range
+2026-06-28 23:12:12.614 [Thread-22] WARN  IntPoint: p_x is out of range
+2026-06-28 23:12:12.615 [Thread-22] WARN  IntPoint: p_y is out of range
+2026-06-28 23:12:34.169 [Thread-22] WARN  CalcFromSide: start corner was not found
+2026-06-28 23:12:36.713 [Thread-22] WARN  CalcFromSide: start corner was not found
+2026-06-28 23:13:51.676 [Thread-22] INFO  Auto-routing was completed in 4 minute(s) 36.20 seconds.
+2026-06-28 23:13:51.777 [Thread-22] INFO  Starting route optimization on 1 thread...
+2026-06-28 23:14:01.990 [Thread-22] INFO  Route optimization was completed in 10.21 seconds and it improved the design by ~0.18%.
+2026-06-28 23:14:02.018 [Thread-22] INFO  Saving 'C:/Users/Mads2/AppData/Local/Temp/claude/C--Users-Mads2-personal-projects/6c7ff437-1f0d-40ac-9d1c-bbde1b01798e/scratchpad/system_fp2.ses'...

@@ -21,8 +21,9 @@ def cmd_place(args):
     out_path = args[1] if len(args) > 1 else _default_out(in_path)
     seed = int(args[2]) if len(args) > 2 else 0
 
+    strategy = os.environ.get("STRATEGY", "auto")
     model, pcb = kicad_io.load_board(in_path)
-    report = engine.place(model, seed=seed)
+    report = engine.place(model, seed=seed, strategy=strategy)
     kicad_io.apply_placement(model, pcb, out_path)
 
     report["input"] = in_path
