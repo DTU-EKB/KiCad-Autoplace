@@ -116,7 +116,7 @@ def cmd_refine(args):
     progress = None
     if stream:
         def progress(it, pct, best_pct):
-            emit({"type": "iteration", "iter": it,
+            emit({"type": "iteration", "iter": it, "budget": budget,
                   "routed_pct": round(pct, 1), "best_pct": round(best_pct, 1)})
 
     model, pcb = kicad_io.load_board(in_path)

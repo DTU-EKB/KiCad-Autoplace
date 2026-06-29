@@ -49,9 +49,19 @@
             <label for="seed">Seed</label>
             <input id="seed" type="number" value="0" min="0" step="1" />
           </div>
+          <div class="field">
+            <label for="effort">Refine effort</label>
+            <select id="effort">
+              <option value="quick">Quick (~3 routes)</option>
+              <option value="normal" selected>Normal (~5 routes)</option>
+              <option value="thorough">Thorough (~10 routes)</option>
+            </select>
+          </div>
           <button id="run" class="btn btn-primary" disabled>Run AutoPlacement</button>
           <button id="refine" class="btn btn-ghost" disabled>Refine (route-driven)</button>
+          <button id="cancel" class="btn btn-ghost" hidden>Cancel</button>
         </div>
+        <p id="refineNote" class="hint" hidden></p>
 
         <div id="progressWrap" class="progress-wrap" hidden>
           <div class="progress-head">
@@ -62,6 +72,7 @@
           <div id="refineReadout" class="refine-readout" hidden>
             routed: <span id="refinePct">–</span>% (best <span id="refineBest">–</span>%)
           </div>
+          <div id="refineHistory" class="refine-readout" hidden></div>
         </div>
       </section>
 

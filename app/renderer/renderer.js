@@ -7,6 +7,14 @@ const BLOCK_COLORS = [
   "#2a78d6", "#1baf7a", "#eda100", "#4a3aa7", "#e87ba4",
   "#e34948", "#199e70", "#d95926", "#9085e9", "#888781",
 ];
+
+// Refine effort -> (loop budget, FreeRouting passes per route). Higher = slower
+// but more chances to close the routing gap.
+const EFFORT = {
+  quick: { budget: 3, passes: 10 },
+  normal: { budget: 5, passes: 20 },
+  thorough: { budget: 10, passes: 30 },
+};
 function blockColor(block, blockList) {
   const i = blockList.indexOf(block);
   return BLOCK_COLORS[(i < 0 ? 0 : i) % BLOCK_COLORS.length];
@@ -89,6 +97,7 @@ const state = {
   running: false,
   geometry: null,
   connectors: new Set(),
+  refineToolsOk: false, // Java + FreeRouting jar present
 };
 
 // ---- python status ---------------------------------------------------------
@@ -141,7 +150,9 @@ function refreshRunEnabled() {
   const ready = state.python && state.board && !state.running;
   $("run").disabled = !ready;
   const refineBtn = $("refine");
-  if (refineBtn) refineBtn.disabled = !ready;
+  if (refineBtn) refineBtn.disabled = !ready || !state.refineToolsOk;
+  const cancel = $("cancel");
+  if (cancel) cancel.hidden = !state.running;       // only visible mid-run
 }
 
 // ---- run -------------------------------------------------------------------
@@ -162,6 +173,7 @@ function stageLabel(stage) {
       anneal: "Optimizing placement…",
       legalize: "Removing overlaps…",
       route: "Routing with FreeRouting…",
+      refine: "Routing + refining…",
       done: "Finishing…",
     }[stage] || "Working…"
   );
@@ -222,6 +234,7 @@ function showResults(report, output) {
 async function run() {
   if (state.running) return;
   state.running = true;
+  $("cancel").disabled = false;
   refreshRunEnabled();
   $("results").hidden = true;
   $("log").textContent = "";
@@ -251,6 +264,9 @@ async function run() {
       $("boardMode").textContent = "after placement";
       renderBoard(state.geometry);
     }
+  } else if (res.cancelled) {
+    setProgress("done", 0);
+    $("progressStage").textContent = "Cancelled";
   } else {
     setProgress("done", 100);
     $("progressStage").textContent = "Failed";
@@ -261,11 +277,14 @@ async function run() {
 
 async function runRefine() {
   if (state.running) return;
+  const eff = EFFORT[$("effort").value] || EFFORT.normal;
   state.running = true;
+  $("cancel").disabled = false;
   refreshRunEnabled();
-  $("refine").disabled = true;
   $("log").textContent = "";
-  setProgress("route", 0);
+  $("refineHistory").hidden = true;
+  setProgress("refine", 0);
+  $("progressStage").textContent = `Refining — up to ${eff.budget} iterations`;
   $("refineReadout").hidden = false;
   $("refinePct").textContent = "–";
   $("refineBest").textContent = "–";
@@ -274,6 +293,8 @@ async function runRefine() {
     board: state.board,
     python: state.python,
     seed: parseInt($("seed").value, 10) || 0,
+    budget: eff.budget,
+    passes: eff.passes,
   });
 
   state.running = false;
@@ -282,12 +303,20 @@ async function runRefine() {
     setProgress("done", 100);
     showResults(res.report, res.output);
     $("refineBest").textContent = res.report.routed_pct;
+    if (Array.isArray(res.report.history) && res.report.history.length) {
+      $("refineHistory").textContent =
+        "routed %: " + res.report.history.map((h) => (+h).toFixed(1)).join(" → ");
+      $("refineHistory").hidden = false;
+    }
     const dump = await window.api.dumpBoard({ python: state.python, board: res.output });
     if (dump.ok) {
       state.geometry = dump.geometry;
       $("boardMode").textContent = "after refinement";
       renderBoard(state.geometry);
     }
+  } else if (res.cancelled) {
+    setProgress("done", 0);
+    $("progressStage").textContent = "Cancelled";
   } else {
     setProgress("done", 100);
     $("progressStage").textContent = "Refine failed";
@@ -309,8 +338,9 @@ function openLog(force) {
 window.api.onPlaceEvent((evt) => {
   if (evt.type === "progress") setProgress(evt.stage, evt.percent);
   else if (evt.type === "iteration") {
-    setProgress("route", 100);
-    $("progressStage").textContent = `Routing + refining (iter ${evt.iter})`;
+    const budget = evt.budget || 1;
+    setProgress("refine", Math.round((evt.iter / budget) * 100));
+    $("progressStage").textContent = `Refining — iteration ${evt.iter}/${budget}`;
     $("refineReadout").hidden = false;
     $("refinePct").textContent = evt.routed_pct;
     $("refineBest").textContent = evt.best_pct;
@@ -321,6 +351,11 @@ window.api.onPlaceEvent((evt) => {
 $("pickBoard").addEventListener("click", pickBoard);
 $("run").addEventListener("click", run);
 $("refine").addEventListener("click", runRefine);
+$("cancel").addEventListener("click", async () => {
+  $("cancel").disabled = true;
+  $("progressStage").textContent = "Cancelling…";
+  await window.api.cancelRun();
+});
 $("changePython").addEventListener("click", async () => {
   setPillWait("Selecting…");
   const info = await window.api.pickPython();
@@ -334,6 +369,18 @@ $("logToggle").addEventListener("click", () => openLog());
 
 async function init() {
   await detect();
+  // Refine needs Java + FreeRouting; gate the button and explain if missing.
+  const tools = await window.api.checkRefineTools();
+  state.refineToolsOk = tools.ok;
+  if (!tools.ok) {
+    const why = !tools.java
+      ? "Java not found on PATH"
+      : `FreeRouting jar missing (${tools.jarPath})`;
+    $("refine").title = `Route-driven refine needs FreeRouting — ${why}`;
+    $("refineNote").textContent = `Refine disabled: ${why}`;
+    $("refineNote").hidden = false;
+  }
+  refreshRunEnabled();
   const dev = await window.api.devConfig();
   if (dev && dev.board) {
     state.board = dev.board;
