@@ -19,13 +19,13 @@
       },
       "versions": [
         {
-          "version": "0.1.0",
+          "version": "0.2.0",
           "status": "development",
           "kicad_version": "9.0",
-          "download_url": "https://github.com/DTU-EKB/KiCad-Autoplace/releases/download/v0.1.0/dtu-ekb-autoplace-0.1.0.zip",
-          "download_sha256": "6ec1d886986f4c5c0369244ddcf80aed912088171ba3cc106c12c1b9ef834eff",
-          "download_size": 16629,
-          "install_size": 37278
+          "download_url": "https://github.com/DTU-EKB/KiCad-Autoplace/releases/download/v0.2.0/dtu-ekb-autoplace-0.2.0.zip",
+          "download_sha256": "701dbba139f1e8142c18ef6f99773935063c0c7eb472f988877d3caa64485485",
+          "download_size": 20297,
+          "install_size": 46644
         }
       ]
     }
