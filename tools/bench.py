@@ -36,8 +36,9 @@ def main(repo):
             t0 = time.time()
             r = engine.place(model)
             dt = time.time() - t0
-            kicad_io.apply_placement(model, pcb,
-                                     os.path.join(out_dir, name + ".autoplaced.kicad_pcb"))
+            out_pcb = os.path.join(out_dir, name + ".autoplaced.kicad_pcb")
+            kicad_io.apply_placement(model, pcb, out_pcb)
+            kicad_io.copy_project(path, out_pcb)   # carry net-class rules
             b, a = r["before"], r["after"]
             print(f"{name:16} {a['components']:5d} {r['blocks']:3d} "
                   f"{b['hpwl_mm']:7.0f}->{a['hpwl_mm']:<7.0f} {r['hpwl_delta_pct']:5.0f} "

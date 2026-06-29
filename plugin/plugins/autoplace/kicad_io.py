@@ -10,6 +10,9 @@ quirk the DTU ``pcb_build.py`` has to fight.
 """
 from __future__ import annotations
 
+import os
+import shutil
+
 import pcbnew
 
 from .model import Board, Component, Pad
@@ -69,6 +72,22 @@ def load_board(path: str) -> tuple[Board, "pcbnew.BOARD"]:
             ))
         board.components[ref] = comp
     return board, pcb
+
+
+def copy_project(src_pcb_path: str, dst_pcb_path: str) -> bool:
+    """Copy the source board's ``.kicad_pro`` next to the output board.
+
+    Net-class rules (track width, clearance) live in the project file, and
+    ``ExportSpecctraDSN`` reads widths from it -- without the project file every
+    net falls back to KiCad's 0.2 mm default, so FreeRouting would route
+    un-manufacturable hair-thin traces instead of the 1.0 mm fiber-laser tracks.
+    """
+    src_pro = os.path.splitext(src_pcb_path)[0] + ".kicad_pro"
+    dst_pro = os.path.splitext(dst_pcb_path)[0] + ".kicad_pro"
+    if os.path.exists(src_pro) and os.path.abspath(src_pro) != os.path.abspath(dst_pro):
+        shutil.copyfile(src_pro, dst_pro)
+        return True
+    return False
 
 
 def unrouted_count(pcb: "pcbnew.BOARD") -> int:

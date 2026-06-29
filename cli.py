@@ -25,6 +25,9 @@ def cmd_place(args):
     model, pcb = kicad_io.load_board(in_path)
     report = engine.place(model, seed=seed, strategy=strategy)
     kicad_io.apply_placement(model, pcb, out_path)
+    # carry the project file so net-class (track/clearance) rules survive: the
+    # router reads widths from <stem>.kicad_pro, not the .kicad_pcb.
+    report["project_copied"] = kicad_io.copy_project(in_path, out_path)
 
     report["input"] = in_path
     report["output"] = out_path
