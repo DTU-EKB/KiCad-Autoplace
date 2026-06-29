@@ -15,6 +15,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "plugin", "plugins"))
 
 from autoplace import engine, kicad_io  # noqa: E402
 
+DEFAULT_JAR = os.path.expandvars(r"%USERPROFILE%\.freerouting\freerouting-1.9.0.jar")
+
 
 def _read_connectors(in_path):
     """Read the connector ref list from <stem>.autoplace.json, or None."""
@@ -89,17 +91,74 @@ def cmd_dump(args):
     return 0
 
 
+def cmd_refine(args):
+    """Route-driven refinement: route -> re-anneal congested spots -> repeat (keep best).
+
+    Refines the EXISTING placement in the input board (it does not re-place from
+    scratch). Connectors named in the sidecar keep their board edge: their edge
+    is inferred from their current position so the re-anneal slides them along it
+    rather than pulling them inward. Needs KiCad's python + Java + FreeRouting.
+    """
+    from autoplace import edge as edge_mod
+    from autoplace import refine as refine_mod
+    in_path = args[0]
+    out_path = args[1] if len(args) > 1 else _refine_out(in_path)
+    seed = int(args[2]) if len(args) > 2 else 0
+    jar = os.environ.get("FREEROUTING_JAR", DEFAULT_JAR)
+    passes = int(os.environ.get("REFINE_PASSES", "20"))
+    budget = int(os.environ.get("REFINE_BUDGET", "8"))
+    stream = os.environ.get("AUTOPLACE_STREAM") == "1"
+
+    def emit(obj):
+        sys.stdout.write(json.dumps(obj) + "\n")
+        sys.stdout.flush()
+
+    progress = None
+    if stream:
+        def progress(it, pct, best_pct):
+            emit({"type": "iteration", "iter": it,
+                  "routed_pct": round(pct, 1), "best_pct": round(best_pct, 1)})
+
+    model, pcb = kicad_io.load_board(in_path)
+    # keep flagged connectors pinned to the edge they already sit on
+    for ref in (_read_connectors(in_path) or []):
+        c = model.components.get(ref)
+        if c is not None and not c.locked:
+            c.is_connector = True
+            c.edge = edge_mod.nearest_edge(model, c.x, c.y)
+    # net-class widths must sit next to the file route_once reloads
+    kicad_io.copy_project(in_path, out_path)
+    r = refine_mod.refine(model, pcb, jar=jar, work_pcb=out_path, passes=passes,
+                          seed=seed, budget=budget, progress=progress)
+    kicad_io.apply_placement(model, pcb, out_path)        # write the best placement
+    stem = os.path.splitext(out_path)[0]
+    report = {"input": in_path, "output": out_path,
+              "routed_pct": round(r["best_pct"], 1), "iterations": r["iterations"],
+              "history": r["history"], "routed_output": stem + ".routed.kicad_pcb"}
+    if stream:
+        report["type"] = "result"
+        emit(report)
+    else:
+        print(json.dumps(report, indent=2))
+    return 0
+
+
 def _default_out(in_path):
     stem, _ = os.path.splitext(in_path)
     return stem + ".autoplaced.kicad_pcb"
 
 
+def _refine_out(in_path):
+    stem, _ = os.path.splitext(in_path)
+    return stem + ".refined.kicad_pcb"
+
+
 def main(argv):
-    if len(argv) < 2 or argv[1] not in ("place", "metrics", "dump"):
+    if len(argv) < 2 or argv[1] not in ("place", "metrics", "dump", "refine"):
         print(__doc__)
         return 2
-    return {"place": cmd_place, "metrics": cmd_metrics,
-            "dump": cmd_dump}[argv[1]](argv[2:])
+    return {"place": cmd_place, "metrics": cmd_metrics, "dump": cmd_dump,
+            "refine": cmd_refine}[argv[1]](argv[2:])
 
 
 if __name__ == "__main__":
