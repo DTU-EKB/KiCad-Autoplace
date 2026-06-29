@@ -23,6 +23,7 @@ from __future__ import annotations
 import math
 
 from .blocks import block_centroids
+from .edge import pin_to_edge
 from .metrics import _is_power
 from .model import Board
 
@@ -50,6 +51,9 @@ class Annealer:
         self.rng = random.Random(seed)
         self.comps = list(board.components.values())
         self.free = [c for c in self.comps if not c.locked]
+        # parts the rotate/swap moves may touch (edge connectors are excluded:
+        # they keep their assigned orientation and only slide along their edge)
+        self.movable = [c for c in self.free if not c.edge]
         # net -> list of (comp, pad) for signal nets only
         self.comp_nets: dict[str, set[str]] = {c.ref: set() for c in self.comps}
         self.net_members: dict[str, list[tuple]] = {}
@@ -196,14 +200,24 @@ class Annealer:
         ox, oy = c.x, c.y
         before = self.local_cost((c,))
         amp = max(1.0, T)
-        c.x += (self.rng.random() - 0.5) * 2 * amp
-        c.y += (self.rng.random() - 0.5) * 2 * amp
+        if c.edge:
+            d = (self.rng.random() - 0.5) * 2 * amp
+            if c.edge in ("L", "R"):
+                c.y += d
+            else:
+                c.x += d
+            pin_to_edge(c, self.board, self.margin)
+        else:
+            c.x += (self.rng.random() - 0.5) * 2 * amp
+            c.y += (self.rng.random() - 0.5) * 2 * amp
         self._clamp(c)
         after = self.local_cost((c,))
         return self._accept(after - before, T, lambda: self._revert1(c, ox, oy))
 
     def _try_rotate(self, T):
-        c = self.rng.choice(self.free)
+        if not self.movable:
+            return None
+        c = self.rng.choice(self.movable)
         old_rot = c.rot
         before = self.local_cost((c,))
         c.rot = self.rng.choice([r for r in (0, 90, 180, 270) if r != old_rot])
@@ -217,9 +231,9 @@ class Annealer:
         c.rot = old_rot
 
     def _try_swap(self):
-        if len(self.free) < 2:
+        if len(self.movable) < 2:
             return None
-        a, b = self.rng.sample(self.free, 2)
+        a, b = self.rng.sample(self.movable, 2)
         before = self.local_cost((a, b))
         a.x, b.x = b.x, a.x
         a.y, b.y = b.y, a.y
