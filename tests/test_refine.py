@@ -46,24 +46,21 @@ def test_stops_at_100_without_stepping():
 
 
 def test_warm_starts_from_best_not_last_candidate():
+    # step1 from "init"(90) -> c1 routes 95 (accept); step2 from "c1"(95) -> c2
+    # routes 80 (reject); step3 must warm-start from best "c1" again, not the
+    # rejected "c2".
     seen = []
-    seq = iter([90.0, 95.0, 91.0, 96.0])
+    seq = iter([90.0, 95.0, 80.0, 99.0])
+
     def route_eval(model):
         return next(seq), None
+
     def step(model, field):
         seen.append(model)
-        return {90.0: "c1", 95.0: "c2", 91.0: "c3"}.get(0, f"c{len(seen)}")
-    # simpler: record the model passed to step
-    def step2(model, field):
-        seen.append(model)
         return f"c{len(seen)}"
-    seq2 = iter([90.0, 95.0, 80.0, 99.0])
-    def route_eval2(model):
-        return next(seq2), None
-    r = refine.keep_best_loop("init", route_eval2, step2,
-                              budget=3, patience=5, margin=1.0)
-    # step1 from "init"(90)->c1 routes 95 accept; step2 from "c1"(95)->c2 routes
-    # 80 reject; step3 warm-starts from best "c1" again, not rejected "c2"
+
+    refine.keep_best_loop("init", route_eval, step,
+                          budget=3, patience=5, margin=1.0)
     assert seen[0] == "init"
     assert seen[1] == "c1"
     assert seen[2] == "c1"
