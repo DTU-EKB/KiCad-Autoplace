@@ -124,6 +124,51 @@ def cmd_place_multi(args):
     return 0
 
 
+def cmd_finalize(args):
+    """Promote a finished board to the project's main .kicad_pcb and sweep temps.
+
+      cli.py finalize FINISHED.kicad_pcb PROJECT.kicad_pcb [--commit]
+
+    Dry-run by default: prints the plan (promote target, backup path, files that
+    would be deleted) and touches nothing. With --commit it performs the promote
+    + backup + delete. Pure filesystem work -- no pcbnew needed.
+    """
+    from autoplace import finalize as fin
+    commit = "--commit" in args
+    paths = [a for a in args if not a.startswith("--")]
+    finished, project = paths[0], paths[1]
+
+    def emit(obj):
+        sys.stdout.write(json.dumps(obj) + "\n")
+        sys.stdout.flush()
+
+    if not os.path.exists(finished):
+        emit({"type": "error", "error": f"finished board not found: {finished}"})
+        return 1
+    if not os.path.exists(project):
+        emit({"type": "error", "error": f"project board not found: {project}"})
+        return 1
+
+    if not commit:
+        directory = os.path.dirname(os.path.abspath(project))
+        base = os.path.basename(project)
+        if base.endswith(".kicad_pcb"):
+            base = base[: -len(".kicad_pcb")]
+        same = os.path.abspath(finished) == os.path.abspath(project)
+        emit({
+            "type": "plan",
+            "promote": None if same else {"from": finished, "to": project},
+            "backup": None if same else project + ".bak",
+            "delete": sorted(fin.classify_temp_files(os.listdir(directory), base)),
+        })
+        return 0
+
+    res = fin.finalize_project(finished, project)
+    res["type"] = "result"
+    emit(res)
+    return 0
+
+
 def cmd_metrics(args):
     """Just print metrics for a board, no placement (baseline measurement)."""
     from autoplace import metrics
@@ -211,7 +256,8 @@ def _refine_out(in_path):
 
 def main(argv):
     cmds = {"place": cmd_place, "place-multi": cmd_place_multi,
-            "metrics": cmd_metrics, "dump": cmd_dump, "refine": cmd_refine}
+            "metrics": cmd_metrics, "dump": cmd_dump, "refine": cmd_refine,
+            "finalize": cmd_finalize}
     if len(argv) < 2 or argv[1] not in cmds:
         print(__doc__)
         return 2
