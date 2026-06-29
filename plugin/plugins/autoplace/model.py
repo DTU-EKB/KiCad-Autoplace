@@ -35,6 +35,7 @@ class Component:
     is_connector: bool = False
     sheet: str = ""                # hierarchical schematic sheet path
     block: str = ""
+    edge: str = ""                 # "" free; "L"/"R"/"T"/"B" pinned to that edge
 
     def pad_world(self, pad: Pad) -> tuple[float, float]:
         # Matches pcbnew Rotate(centre, +deg): (x, y) -> (y, -x) per 90 deg.
