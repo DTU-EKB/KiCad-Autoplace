@@ -45,10 +45,6 @@
               <option value="compact">Compact (force-directed)</option>
             </select>
           </div>
-          <div class="field seed-field">
-            <label for="seed">Seed</label>
-            <input id="seed" type="number" value="0" min="0" step="1" />
-          </div>
           <div class="field">
             <label for="effort">Refine effort</label>
             <select id="effort">
@@ -87,6 +83,15 @@
           <span id="connCount" class="muted">0 connectors</span>
           <span id="boardMode" class="muted"></span>
         </div>
+      </section>
+
+      <!-- Candidate gallery -->
+      <section id="gallery" class="card gallery" hidden>
+        <div class="results-head">
+          <h2>Candidates</h2>
+          <span id="galleryNote" class="muted">generating candidates…</span>
+        </div>
+        <div id="galleryGrid" class="gallery-grid"></div>
       </section>
 
       <!-- Results dashboard -->
