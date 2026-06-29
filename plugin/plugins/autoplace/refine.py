@@ -39,7 +39,7 @@ def keep_best_loop(initial, route_eval, step, *, budget, patience, margin,
 
 
 def refine(board, pcb, *, jar, work_pcb, passes=20, seed=0, budget=8, patience=3,
-           margin_conns=1, cell_mm=5.0, progress=None):
+           margin_conns=1, cell_mm=5.0, place_margin=0.8, progress=None):
     """pcbnew-wired loop. Mutates `board` to the best placement found.
 
     Each evaluation writes the candidate placement to ``work_pcb`` and routes
@@ -70,7 +70,7 @@ def refine(board, pcb, *, jar, work_pcb, passes=20, seed=0, budget=8, patience=3
 
     def step(model, field):
         cand = copy.deepcopy(model)
-        anneal_mod.anneal(cand, seed=seed, margin=0.8, congestion=field)
+        anneal_mod.anneal(cand, seed=seed, margin=place_margin, congestion=field)
         return cand
 
     best = copy.deepcopy(board)

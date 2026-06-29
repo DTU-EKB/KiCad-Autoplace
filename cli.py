@@ -18,6 +18,18 @@ from autoplace import engine, kicad_io  # noqa: E402
 DEFAULT_JAR = os.path.expandvars(r"%USERPROFILE%\.freerouting\freerouting-1.9.0.jar")
 
 
+def _fab():
+    """Fabrication profile name from the FAB env var (default 'cnc')."""
+    return os.environ.get("FAB", "cnc")
+
+
+def _apply_fab(out_path, fab):
+    """Write the fabrication's clearance/track into the output .kicad_pro."""
+    from autoplace import fabrication
+    out_pro = os.path.splitext(out_path)[0] + ".kicad_pro"
+    return fabrication.apply_to_project(out_pro, fab)
+
+
 def _read_connectors(in_path):
     """Read the connector ref list from <stem>.autoplace.json, or None."""
     side = os.path.splitext(in_path)[0] + ".autoplace.json"
@@ -52,17 +64,23 @@ def cmd_place(args):
             emit({"type": "progress", "stage": stage,
                   "percent": round(100.0 * frac, 1)})
 
+    from autoplace import fabrication
     strategy = os.environ.get("STRATEGY", "auto")
+    fab = _fab()
     if stream:
         emit({"type": "progress", "stage": "load", "percent": 0.0})
     model, pcb = kicad_io.load_board(in_path)
     connectors = _read_connectors(in_path)
     report = engine.place(model, seed=seed, strategy=strategy,
-                          connectors=connectors, progress=progress)
+                          connectors=connectors, margin=fabrication.margin_for(fab),
+                          progress=progress)
     kicad_io.apply_placement(model, pcb, out_path)
     # carry the project file so net-class (track/clearance) rules survive: the
     # router reads widths from <stem>.kicad_pro, not the .kicad_pcb.
     report["project_copied"] = kicad_io.copy_project(in_path, out_path)
+    # set this fabrication's clearance/track in the copied project (routing + DRC)
+    report["fab"] = fab
+    report["fab_applied"] = _apply_fab(out_path, fab)
 
     report["input"] = in_path
     report["output"] = out_path
@@ -81,7 +99,7 @@ def cmd_place_multi(args):
     as a gallery; picking one re-runs ``place`` with that seed (deterministic, so
     the saved board matches the previewed thumbnail).
     """
-    from autoplace import multiseed
+    from autoplace import fabrication, multiseed
     in_path = args[0]
     count = int(args[1]) if len(args) > 1 else 6
 
@@ -90,11 +108,13 @@ def cmd_place_multi(args):
         sys.stdout.flush()
 
     strategy = os.environ.get("STRATEGY", "auto")
+    fab = _fab()
     emit({"type": "progress", "stage": "load", "percent": 0.0})
     model, _ = kicad_io.load_board(in_path)
     connectors = _read_connectors(in_path)
     for i, cand in enumerate(multiseed.run_candidates(
-            model, count, strategy=strategy, connectors=connectors)):
+            model, count, strategy=strategy, connectors=connectors,
+            margin=fabrication.margin_for(fab))):
         cand["index"] = i
         cand["count"] = count
         emit({"type": "progress", "stage": "place",
@@ -130,10 +150,12 @@ def cmd_refine(args):
     rather than pulling them inward. Needs KiCad's python + Java + FreeRouting.
     """
     from autoplace import edge as edge_mod
+    from autoplace import fabrication
     from autoplace import refine as refine_mod
     in_path = args[0]
     out_path = args[1] if len(args) > 1 else _refine_out(in_path)
     seed = int(args[2]) if len(args) > 2 else 0
+    fab = _fab()
     jar = os.environ.get("FREEROUTING_JAR", DEFAULT_JAR)
     passes = int(os.environ.get("REFINE_PASSES", "20"))
     budget = int(os.environ.get("REFINE_BUDGET", "8"))
@@ -156,10 +178,14 @@ def cmd_refine(args):
         if c is not None and not c.locked:
             c.is_connector = True
             c.edge = edge_mod.nearest_edge(model, c.x, c.y)
-    # net-class widths must sit next to the file route_once reloads
+    # net-class widths must sit next to the file route_once reloads; then stamp
+    # this fabrication's clearance/track so the route uses the right rules
     kicad_io.copy_project(in_path, out_path)
+    _apply_fab(out_path, fab)
     r = refine_mod.refine(model, pcb, jar=jar, work_pcb=out_path, passes=passes,
-                          seed=seed, budget=budget, progress=progress)
+                          seed=seed, budget=budget,
+                          place_margin=fabrication.margin_for(fab),
+                          progress=progress)
     kicad_io.apply_placement(model, pcb, out_path)        # write the best placement
     stem = os.path.splitext(out_path)[0]
     report = {"input": in_path, "output": out_path,
