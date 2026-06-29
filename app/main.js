@@ -228,6 +228,76 @@ function runPlace(win, { board, python, strategy, seed }) {
   });
 }
 
+function runPlaceMulti(win, { board, python, strategy, count }) {
+  return new Promise((resolve) => {
+    if (!fs.existsSync(CLI_PY)) {
+      return resolve({ ok: false, error: `cli.py not found at ${CLI_PY}` });
+    }
+    const n = count || 6;
+    const send = (evt) => {
+      if (!win.isDestroyed()) win.webContents.send("place-event", evt);
+    };
+    const env = { ...process.env, AUTOPLACE_STREAM: "1", STRATEGY: strategy || "auto" };
+    const args = [CLI_PY, "place-multi", board, String(n)];
+    send({ type: "log", line: `$ ${python} cli.py place-multi "${board}" ${n}` });
+
+    let proc;
+    try {
+      proc = spawn(python, args, {
+        cwd: REPO_ROOT, env, detached: process.platform !== "win32",
+      });
+    } catch (e) {
+      return resolve({ ok: false, error: String(e) });
+    }
+    activeProc = proc;
+    let stdoutBuf = "";
+    let got = 0;
+
+    const handleLine = (line) => {
+      const t = line.trim();
+      if (!t) return;
+      if (t.startsWith("{")) {
+        try {
+          const obj = JSON.parse(t);
+          if (obj.type === "progress")
+            return send({ type: "progress", stage: obj.stage, percent: obj.percent });
+          if (obj.type === "candidate" || obj.type === "candidate-error") {
+            if (obj.type === "candidate") got++;
+            return send(obj);
+          }
+          if (obj.type === "done") return send(obj);
+        } catch {
+          /* fall through to log */
+        }
+      }
+      send({ type: "log", line });
+    };
+
+    proc.stdout.on("data", (chunk) => {
+      stdoutBuf += chunk.toString();
+      let nl;
+      while ((nl = stdoutBuf.indexOf("\n")) >= 0) {
+        handleLine(stdoutBuf.slice(0, nl));
+        stdoutBuf = stdoutBuf.slice(nl + 1);
+      }
+    });
+    proc.stderr.on("data", (chunk) =>
+      chunk.toString().split("\n").forEach((l) => l.trim() && send({ type: "log", line: l }))
+    );
+    proc.on("error", (e) => {
+      if (activeProc === proc) activeProc = null;
+      resolve({ ok: false, error: `failed to start python: ${e.message}` });
+    });
+    proc.on("close", (code) => {
+      if (activeProc === proc) activeProc = null;
+      if (proc._cancelled) return resolve({ ok: false, cancelled: true });
+      if (stdoutBuf.trim()) handleLine(stdoutBuf);
+      if (got > 0) resolve({ ok: true, count: got });
+      else resolve({ ok: false, error: `place-multi exited ${code} without candidates (check the log)` });
+    });
+  });
+}
+
 function runRefine(win, { board, python, seed, budget, passes }) {
   return new Promise((resolve) => {
     if (!fs.existsSync(CLI_PY)) {
@@ -358,6 +428,7 @@ function registerIpc(win) {
   });
 
   ipcMain.handle("run-place", (_e, opts) => runPlace(win, opts));
+  ipcMain.handle("run-place-multi", (_e, opts) => runPlaceMulti(win, opts));
 
   ipcMain.handle("run-refine", (_e, opts) => runRefine(win, opts));
 
