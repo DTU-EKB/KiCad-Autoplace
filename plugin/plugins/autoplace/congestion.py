@@ -21,8 +21,7 @@ _RES_RE = re.compile(r"\(resolution\s+um\s+(\d+)\)")
 _VIA_RE = re.compile(r'\(via\s+"[^"]*"\s+(-?\d+)\s+(-?\d+)')
 _PATH_RE = re.compile(r"\(path\s+(\S+)\s+\d+\s+([-\d\s]+?)\)", re.DOTALL)
 # a net block: (net NAME ... ) up to the next (net or end of network_out
-_NET_RE = re.compile(r"\(net\s+(\"[^\"]+\"|\S+)(.*?)(?=\(net\s|\)\s*\)\s*\)\s*$|\Z)",
-                     re.DOTALL)
+_NET_RE = re.compile(r"\(net\s+(\"[^\"]+\"|\S+)(.*?)(?=\(net\s|\Z)", re.DOTALL)
 
 
 class CongestionField:
@@ -79,8 +78,10 @@ def parse(ses_path: str, board: Board, cell_mm: float = 5.0) -> CongestionField:
     for net, members in board.nets().items():
         if _is_power(net) or len(members) < 2:
             continue
-        pts = [board.components[r].pad_world(board.components[r].pads[pi])
-               for r, pi in members]
+        pts = []
+        for r, pi in members:
+            c = board.components[r]
+            pts.append(c.pad_world(c.pads[pi]))
         xs = [p[0] for p in pts]; ys = [p[1] for p in pts]
         span[net] = max(1.0, (max(xs) - min(xs)) + (max(ys) - min(ys)))
 
@@ -115,9 +116,9 @@ def parse(ses_path: str, board: Board, cell_mm: float = 5.0) -> CongestionField:
     if not (density or vias or detour):
         return CongestionField(board.x0, board.y0, cell_mm, nx, ny, {})
 
-    dmax = max(density.values()) if density else 1.0
-    vmax = max(vias.values()) if vias else 1.0
-    tmax = max(detour.values()) if detour else 1.0
+    dmax = (max(density.values()) if density else 1.0) or 1.0
+    vmax = (max(vias.values()) if vias else 1.0) or 1.0
+    tmax = (max(detour.values()) if detour else 1.0) or 1.0
     pressure = {}
     for c in set(density) | set(vias) | set(detour):
         pressure[c] = (density.get(c, 0.0) / dmax
