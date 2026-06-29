@@ -7,11 +7,12 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("api", {
   detectPython: () => ipcRenderer.invoke("detect-python"),
   pickPython: () => ipcRenderer.invoke("pick-python"),
-  pickBoard: () => ipcRenderer.invoke("pick-board"),
+  pickBoard: (opts) => ipcRenderer.invoke("pick-board", opts),
   runPlace: (opts) => ipcRenderer.invoke("run-place", opts),
   runPlaceMulti: (opts) => ipcRenderer.invoke("run-place-multi", opts),
   runRefine: (opts) => ipcRenderer.invoke("run-refine", opts),
   cancelRun: () => ipcRenderer.invoke("cancel-run"),
+  finalize: (opts) => ipcRenderer.invoke("finalize", opts),
   checkRefineTools: () => ipcRenderer.invoke("check-refine-tools"),
   revealPath: (p) => ipcRenderer.invoke("reveal-path", p),
   devConfig: () => ipcRenderer.invoke("dev-config"),
