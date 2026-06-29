@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld("api", {
   pickPython: () => ipcRenderer.invoke("pick-python"),
   pickBoard: () => ipcRenderer.invoke("pick-board"),
   runPlace: (opts) => ipcRenderer.invoke("run-place", opts),
+  runPlaceMulti: (opts) => ipcRenderer.invoke("run-place-multi", opts),
   runRefine: (opts) => ipcRenderer.invoke("run-refine", opts),
   cancelRun: () => ipcRenderer.invoke("cancel-run"),
   checkRefineTools: () => ipcRenderer.invoke("check-refine-tools"),
