@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    />
+    <title>DTU-EKB AutoPlace</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo">⊞</div>
+        <div>
+          <h1>AutoPlace</h1>
+          <p>DTU-EKB · connectivity-aware PCB placement</p>
+        </div>
+      </div>
+      <div id="pythonPill" class="pill pill-wait">
+        <span class="dot"></span>
+        <span id="pythonText">Detecting KiCad…</span>
+        <button id="changePython" class="link" hidden>change</button>
+      </div>
+    </header>
+
+    <main>
+      <!-- Setup card -->
+      <section class="card setup">
+        <div class="field board-field">
+          <label>Board</label>
+          <div class="board-row">
+            <button id="pickBoard" class="btn btn-ghost">Select .kicad_pcb…</button>
+            <span id="boardPath" class="path muted">no board selected</span>
+          </div>
+        </div>
+
+        <div class="controls">
+          <div class="field">
+            <label for="strategy">Strategy</label>
+            <select id="strategy">
+              <option value="auto" selected>Auto (recommended)</option>
+              <option value="floorplan">Floorplan (hierarchical)</option>
+              <option value="compact">Compact (force-directed)</option>
+            </select>
+          </div>
+          <div class="field seed-field">
+            <label for="seed">Seed</label>
+            <input id="seed" type="number" value="0" min="0" step="1" />
+          </div>
+          <button id="run" class="btn btn-primary" disabled>Run AutoPlacement</button>
+        </div>
+
+        <div id="progressWrap" class="progress-wrap" hidden>
+          <div class="progress-head">
+            <span id="progressStage">working…</span>
+            <span id="progressPct">0%</span>
+          </div>
+          <div class="bar"><div id="bar" class="bar-fill"></div></div>
+        </div>
+      </section>
+
+      <!-- Results dashboard -->
+      <section id="results" class="card results" hidden>
+        <div class="results-head">
+          <h2>Results</h2>
+          <span id="resultBadge" class="badge"></span>
+        </div>
+        <div class="metrics">
+          <div class="metric">
+            <span class="metric-label">Wirelength (HPWL)</span>
+            <span class="metric-val"><span id="mHpwl">–</span> <i>mm</i></span>
+            <span id="mHpwlDelta" class="metric-delta"></span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Net crossings</span>
+            <span class="metric-val" id="mCross">–</span>
+            <span id="mCrossDelta" class="metric-delta"></span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Overlaps left</span>
+            <span class="metric-val" id="mOverlap">–</span>
+            <span class="metric-delta muted">after legalize</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Components</span>
+            <span class="metric-val" id="mComps">–</span>
+            <span id="mBlocks" class="metric-delta muted"></span>
+          </div>
+        </div>
+        <div class="output-row">
+          <div>
+            <span class="muted">Wrote</span>
+            <span id="outPath" class="path"></span>
+            <span id="projNote" class="muted"></span>
+          </div>
+          <button id="reveal" class="btn btn-ghost">Reveal</button>
+        </div>
+        <p class="hint">
+          Open the output in KiCad, review, then route as usual. The original
+          board is never modified.
+        </p>
+      </section>
+
+      <!-- Log -->
+      <section class="card log-card">
+        <button id="logToggle" class="log-toggle">
+          <span class="chev">▸</span> Log
+        </button>
+        <pre id="log" class="log" hidden></pre>
+      </section>
+    </main>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>

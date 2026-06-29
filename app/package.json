@@ -1,0 +1,15 @@
+{
+  "name": "dtu-ekb-autoplace-app",
+  "version": "0.3.0",
+  "description": "Desktop front-end for the DTU-EKB KiCad auto-placement engine.",
+  "main": "main.js",
+  "author": "DTU and EKB Contributors",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0"
+  }
+}

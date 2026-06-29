@@ -21,9 +21,28 @@ def cmd_place(args):
     out_path = args[1] if len(args) > 1 else _default_out(in_path)
     seed = int(args[2]) if len(args) > 2 else 0
 
+    # Streaming mode (set by the desktop app): emit newline-delimited JSON --
+    # one compact object per line -- so the host can show a live progress bar.
+    #   {"type":"progress","stage":"anneal","percent":45}
+    #   {"type":"result", ...full report... }
+    # Default (human / no env): a single pretty-printed report, as before.
+    stream = os.environ.get("AUTOPLACE_STREAM") == "1"
+
+    def emit(obj):
+        sys.stdout.write(json.dumps(obj) + "\n")
+        sys.stdout.flush()
+
+    progress = None
+    if stream:
+        def progress(stage, frac):
+            emit({"type": "progress", "stage": stage,
+                  "percent": round(100.0 * frac, 1)})
+
     strategy = os.environ.get("STRATEGY", "auto")
+    if stream:
+        emit({"type": "progress", "stage": "load", "percent": 0.0})
     model, pcb = kicad_io.load_board(in_path)
-    report = engine.place(model, seed=seed, strategy=strategy)
+    report = engine.place(model, seed=seed, strategy=strategy, progress=progress)
     kicad_io.apply_placement(model, pcb, out_path)
     # carry the project file so net-class (track/clearance) rules survive: the
     # router reads widths from <stem>.kicad_pro, not the .kicad_pcb.
@@ -31,7 +50,11 @@ def cmd_place(args):
 
     report["input"] = in_path
     report["output"] = out_path
-    print(json.dumps(report, indent=2))
+    if stream:
+        report["type"] = "result"
+        emit(report)
+    else:
+        print(json.dumps(report, indent=2))
     return 0
 
 
