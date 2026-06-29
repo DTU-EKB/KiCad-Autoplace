@@ -19,7 +19,7 @@ import time
 
 import pcbnew
 
-from .kicad_io import unrouted_count
+from .kicad_io import force_gnd_zones, unrouted_count
 
 
 def route_once(pcb_path: str, jar: str, passes: int, stem: str = None) -> dict:
@@ -34,6 +34,9 @@ def route_once(pcb_path: str, jar: str, passes: int, stem: str = None) -> dict:
         raise RuntimeError(f"could not load {pcb_path}")
     if stem is None:
         stem = os.path.splitext(pcb_path)[0]
+    # Ensure a filled GND plane BEFORE export: FreeRouting then sees GND pads
+    # already connected by the pour and won't waste tracks routing ground.
+    force_gnd_zones(board)
     total = unrouted_count(board)               # ratsnest before routing
     dsn, ses = stem + ".dsn", stem + ".ses"
     if not pcbnew.ExportSpecctraDSN(board, dsn):
@@ -53,6 +56,7 @@ def route_once(pcb_path: str, jar: str, passes: int, stem: str = None) -> dict:
             f"FreeRouting produced no usable SES (exit {proc.returncode}).\n{tail}")
 
     pcbnew.ImportSpecctraSES(board, ses)
+    force_gnd_zones(board)                      # refill the GND pour after import
     left = unrouted_count(board)
     routed = total - left
     routed_pcb = stem + ".routed.kicad_pcb"
