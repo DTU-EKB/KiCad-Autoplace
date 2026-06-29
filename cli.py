@@ -16,6 +16,18 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "plugin", "plugins"))
 from autoplace import engine, kicad_io  # noqa: E402
 
 
+def _read_connectors(in_path):
+    """Read the connector ref list from <stem>.autoplace.json, or None."""
+    side = os.path.splitext(in_path)[0] + ".autoplace.json"
+    if os.path.exists(side):
+        try:
+            with open(side, encoding="utf-8") as f:
+                return json.load(f).get("connectors")
+        except Exception:
+            return None
+    return None
+
+
 def cmd_place(args):
     in_path = args[0]
     out_path = args[1] if len(args) > 1 else _default_out(in_path)
@@ -42,7 +54,9 @@ def cmd_place(args):
     if stream:
         emit({"type": "progress", "stage": "load", "percent": 0.0})
     model, pcb = kicad_io.load_board(in_path)
-    report = engine.place(model, seed=seed, strategy=strategy, progress=progress)
+    connectors = _read_connectors(in_path)
+    report = engine.place(model, seed=seed, strategy=strategy,
+                          connectors=connectors, progress=progress)
     kicad_io.apply_placement(model, pcb, out_path)
     # carry the project file so net-class (track/clearance) rules survive: the
     # router reads widths from <stem>.kicad_pro, not the .kicad_pcb.
@@ -66,16 +80,26 @@ def cmd_metrics(args):
     return 0
 
 
+def cmd_dump(args):
+    """Emit board geometry as one JSON line for the desktop canvas."""
+    from autoplace import blocks, serialize
+    model, _ = kicad_io.load_board(args[0])
+    blocks.detect_blocks(model)
+    sys.stdout.write(json.dumps(serialize.board_to_dict(model)) + "\n")
+    return 0
+
+
 def _default_out(in_path):
     stem, _ = os.path.splitext(in_path)
     return stem + ".autoplaced.kicad_pcb"
 
 
 def main(argv):
-    if len(argv) < 2 or argv[1] not in ("place", "metrics"):
+    if len(argv) < 2 or argv[1] not in ("place", "metrics", "dump"):
         print(__doc__)
         return 2
-    return {"place": cmd_place, "metrics": cmd_metrics}[argv[1]](argv[2:])
+    return {"place": cmd_place, "metrics": cmd_metrics,
+            "dump": cmd_dump}[argv[1]](argv[2:])
 
 
 if __name__ == "__main__":
