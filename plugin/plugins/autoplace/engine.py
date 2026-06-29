@@ -43,28 +43,23 @@ def place(board: Board, *, seed: int = 0, grid: float = 0.5, margin: float = 0.8
     channel_scale = max(0.0, min(1.0, (0.55 - util) / 0.35))
 
     rng = random.Random(seed)
-    # Force-directed finds an excellent global arrangement; keep it for every
-    # board. On hierarchical boards the blocks are the schematic sheets, and a
-    # stronger cohesion term then pulls any stray sheet members back into their
-    # group -- enforcing the sheet layout *without* a rigid floorplan (a rigid
-    # region seed was measured to be worse on both HPWL and crossings).
     # Routability (validated with FreeRouting on the 131-part system board) is
-    # driven by SPREAD, not raw wirelength: the compact HPWL-minimal layout routed
-    # 76% while spreading the sheets into regions routed 87%. So hierarchical
-    # boards use the region floorplan by default.
+    # driven by SPREAD, not raw wirelength: the HPWL-minimal compact layout routed
+    # only 76% while spreading each hierarchical sheet into its own region routed
+    # 87%. So hierarchical boards seed from the region floorplan and use a strong
+    # block-cohesion term to keep each sheet grouped; flat single-sheet boards
+    # keep the force-directed seed (which a rigid floorplan was shown to hurt).
     hierarchical = floorplan_mod.is_hierarchical(board)
     use_floorplan = strategy == "floorplan" or (strategy == "auto" and hierarchical)
-    anchors = None
     if use_floorplan:
-        anchors = floorplan_mod.floorplan(board, rng, margin=margin)
+        floorplan_mod.floorplan(board, rng, margin=margin)
     else:
         forcedirected.seed_positions(board, rng, margin=margin)
         forcedirected.run(board, rng, iters=fd_iters, margin=margin)
     if sa_steps:
         anneal.anneal(board, seed=seed, steps=sa_steps, margin=margin,
                       channel_scale=channel_scale,
-                      cohesion_scale=2.5 if use_floorplan else 1.0,
-                      anchors=anchors)
+                      cohesion_scale=2.5 if use_floorplan else 1.0)
     remaining = legal_mod.legalize(board, grid=grid, margin=margin)
 
     after = metrics.summary(board)
