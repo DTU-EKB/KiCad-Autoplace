@@ -318,6 +318,7 @@ async function run() {
     board: state.board,
     python: state.python,
     strategy: $("strategy").value,
+    fab: $("fab").value,
     count: 6,
   });
 
@@ -360,6 +361,7 @@ async function commitSeed(seed) {
     board: state.board,
     python: state.python,
     strategy: $("strategy").value,
+    fab: $("fab").value,
     seed,
   });
 
@@ -411,6 +413,7 @@ async function runRefine() {
     board: state.refineBoard || state.board,
     python: state.python,
     seed: state.committedSeed ?? 0,
+    fab: $("fab").value,
     budget: eff.budget,
     passes: eff.passes,
   });
