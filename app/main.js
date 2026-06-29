@@ -141,7 +141,7 @@ async function detectPython() {
 // Spawns `python cli.py place IN OUT SEED` in streaming mode and forwards each
 // NDJSON line to the renderer as a progress/result/log event.
 
-function runPlace(win, { board, python, strategy, seed }) {
+function runPlace(win, { board, python, strategy, seed, fab }) {
   return new Promise((resolve) => {
     if (!fs.existsSync(CLI_PY)) {
       return resolve({ ok: false, error: `cli.py not found at ${CLI_PY}` });
@@ -157,6 +157,7 @@ function runPlace(win, { board, python, strategy, seed }) {
       ...process.env,
       AUTOPLACE_STREAM: "1",
       STRATEGY: strategy || "auto",
+      FAB: fab || "cnc",
     };
     const args = [CLI_PY, "place", board, out, String(seed ?? 0)];
     send({ type: "log", line: `$ ${python} cli.py place "${board}" ...` });
@@ -228,7 +229,7 @@ function runPlace(win, { board, python, strategy, seed }) {
   });
 }
 
-function runPlaceMulti(win, { board, python, strategy, count }) {
+function runPlaceMulti(win, { board, python, strategy, count, fab }) {
   return new Promise((resolve) => {
     if (!fs.existsSync(CLI_PY)) {
       return resolve({ ok: false, error: `cli.py not found at ${CLI_PY}` });
@@ -237,7 +238,10 @@ function runPlaceMulti(win, { board, python, strategy, count }) {
     const send = (evt) => {
       if (!win.isDestroyed()) win.webContents.send("place-event", evt);
     };
-    const env = { ...process.env, AUTOPLACE_STREAM: "1", STRATEGY: strategy || "auto" };
+    const env = {
+      ...process.env, AUTOPLACE_STREAM: "1",
+      STRATEGY: strategy || "auto", FAB: fab || "cnc",
+    };
     const args = [CLI_PY, "place-multi", board, String(n)];
     send({ type: "log", line: `$ ${python} cli.py place-multi "${board}" ${n}` });
 
@@ -298,7 +302,7 @@ function runPlaceMulti(win, { board, python, strategy, count }) {
   });
 }
 
-function runRefine(win, { board, python, seed, budget, passes }) {
+function runRefine(win, { board, python, seed, budget, passes, fab }) {
   return new Promise((resolve) => {
     if (!fs.existsSync(CLI_PY)) {
       return resolve({ ok: false, error: `cli.py not found at ${CLI_PY}` });
@@ -308,7 +312,7 @@ function runRefine(win, { board, python, seed, budget, passes }) {
     const send = (evt) => {
       if (!win.isDestroyed()) win.webContents.send("place-event", evt);
     };
-    const env = { ...process.env, AUTOPLACE_STREAM: "1" };
+    const env = { ...process.env, AUTOPLACE_STREAM: "1", FAB: fab || "cnc" };
     if (budget) env.REFINE_BUDGET = String(budget);   // effort -> loop length
     if (passes) env.REFINE_PASSES = String(passes);   // FreeRouting passes/route
     const args = [CLI_PY, "refine", board, out, String(seed ?? 0)];
