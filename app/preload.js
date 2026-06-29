@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld("api", {
   pickBoard: () => ipcRenderer.invoke("pick-board"),
   runPlace: (opts) => ipcRenderer.invoke("run-place", opts),
   runRefine: (opts) => ipcRenderer.invoke("run-refine", opts),
+  cancelRun: () => ipcRenderer.invoke("cancel-run"),
+  checkRefineTools: () => ipcRenderer.invoke("check-refine-tools"),
   revealPath: (p) => ipcRenderer.invoke("reveal-path", p),
   devConfig: () => ipcRenderer.invoke("dev-config"),
   dumpBoard: (opts) => ipcRenderer.invoke("dump-board", opts),

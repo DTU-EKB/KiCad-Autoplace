@@ -7,13 +7,62 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require("electron");
 const { spawn } = require("child_process");
 const path = require("path");
 const fs = require("fs");
+const os = require("os");
 
 // cli.py lives at the repo root; this app sits in <repo>/app.
 const REPO_ROOT = path.resolve(__dirname, "..");
 const CLI_PY = path.join(REPO_ROOT, "cli.py");
 
+// The currently-running place/refine child, so Cancel can stop it (and the
+// FreeRouting Java it spawned). Only one run happens at a time.
+let activeProc = null;
+
 function sidecarPath(board) {
   return board.replace(/\.kicad_pcb$/i, "") + ".autoplace.json";
+}
+
+// Kill a child AND its descendants. cli.py spawns Java (FreeRouting) as a
+// grandchild, so killing only the python leaves Java running -- on Windows
+// taskkill /T walks the whole tree.
+function killTree(proc) {
+  if (!proc || proc.killed) return;
+  if (process.platform === "win32") {
+    try {
+      spawn("taskkill", ["/pid", String(proc.pid), "/T", "/F"]);
+    } catch {
+      proc.kill("SIGKILL");
+    }
+  } else {
+    try {
+      process.kill(-proc.pid, "SIGKILL"); // process group
+    } catch {
+      proc.kill("SIGKILL");
+    }
+  }
+}
+
+// Is the FreeRouting toolchain present? Refine needs Java + the jar.
+const FREEROUTING_JAR = path.join(
+  os.homedir(), ".freerouting", "freerouting-1.9.0.jar"
+);
+function checkRefineTools() {
+  return new Promise((resolve) => {
+    const jar = process.env.FREEROUTING_JAR || FREEROUTING_JAR;
+    const jarOk = fs.existsSync(jar);
+    let proc;
+    try {
+      proc = spawn("java", ["-version"]);
+    } catch {
+      return resolve({ ok: false, java: false, jar: jarOk, jarPath: jar });
+    }
+    proc.on("error", () =>
+      resolve({ ok: false, java: false, jar: jarOk, jarPath: jar })
+    );
+    proc.on("close", (code) => {
+      const java = code === 0;
+      resolve({ ok: java && jarOk, java, jar: jarOk, jarPath: jar });
+    });
+  });
 }
 
 // --- KiCad Python discovery -------------------------------------------------
@@ -114,10 +163,13 @@ function runPlace(win, { board, python, strategy, seed }) {
 
     let proc;
     try {
-      proc = spawn(python, args, { cwd: REPO_ROOT, env });
+      proc = spawn(python, args, {
+        cwd: REPO_ROOT, env, detached: process.platform !== "win32",
+      });
     } catch (e) {
       return resolve({ ok: false, error: String(e) });
     }
+    activeProc = proc;
 
     let stdoutBuf = "";
     let result = null;
@@ -158,10 +210,13 @@ function runPlace(win, { board, python, strategy, seed }) {
         .split("\n")
         .forEach((l) => l.trim() && send({ type: "log", line: l }));
     });
-    proc.on("error", (e) =>
-      resolve({ ok: false, error: `failed to start python: ${e.message}` })
-    );
+    proc.on("error", (e) => {
+      if (activeProc === proc) activeProc = null;
+      resolve({ ok: false, error: `failed to start python: ${e.message}` });
+    });
     proc.on("close", (code) => {
+      if (activeProc === proc) activeProc = null;
+      if (proc._cancelled) return resolve({ ok: false, cancelled: true });
       if (stdoutBuf.trim()) handleLine(stdoutBuf);
       if (result) resolve({ ok: true, report: result, output: out });
       else
@@ -173,7 +228,7 @@ function runPlace(win, { board, python, strategy, seed }) {
   });
 }
 
-function runRefine(win, { board, python, seed }) {
+function runRefine(win, { board, python, seed, budget, passes }) {
   return new Promise((resolve) => {
     if (!fs.existsSync(CLI_PY)) {
       return resolve({ ok: false, error: `cli.py not found at ${CLI_PY}` });
@@ -184,15 +239,20 @@ function runRefine(win, { board, python, seed }) {
       if (!win.isDestroyed()) win.webContents.send("place-event", evt);
     };
     const env = { ...process.env, AUTOPLACE_STREAM: "1" };
+    if (budget) env.REFINE_BUDGET = String(budget);   // effort -> loop length
+    if (passes) env.REFINE_PASSES = String(passes);   // FreeRouting passes/route
     const args = [CLI_PY, "refine", board, out, String(seed ?? 0)];
-    send({ type: "log", line: `$ ${python} cli.py refine "${board}" ...` });
+    send({ type: "log", line: `$ ${python} cli.py refine "${board}" (budget ${budget || "default"}, ${passes || "default"} passes)` });
 
     let proc;
     try {
-      proc = spawn(python, args, { cwd: REPO_ROOT, env });
+      proc = spawn(python, args, {
+        cwd: REPO_ROOT, env, detached: process.platform !== "win32",
+      });
     } catch (e) {
       return resolve({ ok: false, error: String(e) });
     }
+    activeProc = proc;
     let stdoutBuf = "";
     let result = null;
     const handleLine = (line) => {
@@ -225,10 +285,13 @@ function runRefine(win, { board, python, seed }) {
     proc.stderr.on("data", (chunk) =>
       chunk.toString().split("\n").forEach((l) => l.trim() && send({ type: "log", line: l }))
     );
-    proc.on("error", (e) =>
-      resolve({ ok: false, error: `failed to start python: ${e.message}` })
-    );
+    proc.on("error", (e) => {
+      if (activeProc === proc) activeProc = null;
+      resolve({ ok: false, error: `failed to start python: ${e.message}` });
+    });
     proc.on("close", (code) => {
+      if (activeProc === proc) activeProc = null;
+      if (proc._cancelled) return resolve({ ok: false, cancelled: true });
       if (stdoutBuf.trim()) handleLine(stdoutBuf);
       if (result) resolve({ ok: true, report: result, output: out });
       else resolve({ ok: false, error: `refine exited ${code} without a result (check the log)` });
@@ -297,6 +360,17 @@ function registerIpc(win) {
   ipcMain.handle("run-place", (_e, opts) => runPlace(win, opts));
 
   ipcMain.handle("run-refine", (_e, opts) => runRefine(win, opts));
+
+  ipcMain.handle("cancel-run", () => {
+    if (activeProc) {
+      activeProc._cancelled = true;
+      killTree(activeProc);
+      return true;
+    }
+    return false;
+  });
+
+  ipcMain.handle("check-refine-tools", () => checkRefineTools());
 
   ipcMain.handle("dump-board", (_e, { python, board }) =>
     dumpBoard(python, board)
