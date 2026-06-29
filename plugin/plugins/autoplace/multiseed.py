@@ -17,18 +17,20 @@ from .model import Board
 
 
 def run_candidates(model: Board, count: int, *, strategy: str = "auto",
-                   connectors: list[str] | None = None) -> Iterator[dict]:
+                   connectors: list[str] | None = None,
+                   margin: float = 0.8) -> Iterator[dict]:
     """Yield one candidate dict for each seed in ``0..count-1``.
 
     Each seed places a fresh deep copy of ``model`` (``engine.place`` mutates
-    positions in place). A seed whose placement raises yields a
-    ``candidate-error`` entry and does not abort the remaining seeds.
+    positions in place). ``margin`` is the placement spacing (the fabrication
+    clearance) so previews match the committed board. A seed whose placement
+    raises yields a ``candidate-error`` entry and does not abort the rest.
     """
     for seed in range(count):
         board = copy.deepcopy(model)
         try:
             report = engine.place(board, seed=seed, strategy=strategy,
-                                  connectors=connectors)
+                                  connectors=connectors, margin=margin)
         except Exception as exc:                      # one bad seed must not kill the gallery
             yield {"type": "candidate-error", "seed": seed, "error": str(exc)}
             continue
