@@ -74,6 +74,36 @@ def cmd_place(args):
     return 0
 
 
+def cmd_place_multi(args):
+    """Run N seeds and stream one candidate (geometry + metrics) per seed.
+
+    Preview-only: writes no board/project files. The app renders the candidates
+    as a gallery; picking one re-runs ``place`` with that seed (deterministic, so
+    the saved board matches the previewed thumbnail).
+    """
+    from autoplace import multiseed
+    in_path = args[0]
+    count = int(args[1]) if len(args) > 1 else 6
+
+    def emit(obj):
+        sys.stdout.write(json.dumps(obj) + "\n")
+        sys.stdout.flush()
+
+    strategy = os.environ.get("STRATEGY", "auto")
+    emit({"type": "progress", "stage": "load", "percent": 0.0})
+    model, _ = kicad_io.load_board(in_path)
+    connectors = _read_connectors(in_path)
+    for i, cand in enumerate(multiseed.run_candidates(
+            model, count, strategy=strategy, connectors=connectors)):
+        cand["index"] = i
+        cand["count"] = count
+        emit({"type": "progress", "stage": "place",
+              "percent": round(100.0 * (i + 1) / count, 1)})
+        emit(cand)
+    emit({"type": "done", "count": count})
+    return 0
+
+
 def cmd_metrics(args):
     """Just print metrics for a board, no placement (baseline measurement)."""
     from autoplace import metrics
@@ -154,11 +184,12 @@ def _refine_out(in_path):
 
 
 def main(argv):
-    if len(argv) < 2 or argv[1] not in ("place", "metrics", "dump", "refine"):
+    cmds = {"place": cmd_place, "place-multi": cmd_place_multi,
+            "metrics": cmd_metrics, "dump": cmd_dump, "refine": cmd_refine}
+    if len(argv) < 2 or argv[1] not in cmds:
         print(__doc__)
         return 2
-    return {"place": cmd_place, "metrics": cmd_metrics, "dump": cmd_dump,
-            "refine": cmd_refine}[argv[1]](argv[2:])
+    return cmds[argv[1]](argv[2:])
 
 
 if __name__ == "__main__":
