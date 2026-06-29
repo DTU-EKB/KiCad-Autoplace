@@ -138,7 +138,10 @@ async function pickBoard() {
 }
 
 function refreshRunEnabled() {
-  $("run").disabled = !(state.python && state.board && !state.running);
+  const ready = state.python && state.board && !state.running;
+  $("run").disabled = !ready;
+  const refineBtn = $("refine");
+  if (refineBtn) refineBtn.disabled = !ready;
 }
 
 // ---- run -------------------------------------------------------------------
@@ -158,6 +161,7 @@ function stageLabel(stage) {
       seed: "Seeding layout…",
       anneal: "Optimizing placement…",
       legalize: "Removing overlaps…",
+      route: "Routing with FreeRouting…",
       done: "Finishing…",
     }[stage] || "Working…"
   );
@@ -255,6 +259,43 @@ async function run() {
   }
 }
 
+async function runRefine() {
+  if (state.running) return;
+  state.running = true;
+  refreshRunEnabled();
+  $("refine").disabled = true;
+  $("log").textContent = "";
+  setProgress("route", 0);
+  $("refineReadout").hidden = false;
+  $("refinePct").textContent = "–";
+  $("refineBest").textContent = "–";
+
+  const res = await window.api.runRefine({
+    board: state.board,
+    python: state.python,
+    seed: parseInt($("seed").value, 10) || 0,
+  });
+
+  state.running = false;
+  refreshRunEnabled();
+  if (res.ok) {
+    setProgress("done", 100);
+    showResults(res.report, res.output);
+    $("refineBest").textContent = res.report.routed_pct;
+    const dump = await window.api.dumpBoard({ python: state.python, board: res.output });
+    if (dump.ok) {
+      state.geometry = dump.geometry;
+      $("boardMode").textContent = "after refinement";
+      renderBoard(state.geometry);
+    }
+  } else {
+    setProgress("done", 100);
+    $("progressStage").textContent = "Refine failed";
+    appendLog("ERROR: " + res.error);
+    openLog(true);
+  }
+}
+
 // ---- log toggle ------------------------------------------------------------
 function openLog(force) {
   const log = $("log");
@@ -267,12 +308,19 @@ function openLog(force) {
 // ---- wire up ---------------------------------------------------------------
 window.api.onPlaceEvent((evt) => {
   if (evt.type === "progress") setProgress(evt.stage, evt.percent);
-  else if (evt.type === "result") showResults(evt.report, evt.report.output);
+  else if (evt.type === "iteration") {
+    setProgress("route", 100);
+    $("progressStage").textContent = `Routing + refining (iter ${evt.iter})`;
+    $("refineReadout").hidden = false;
+    $("refinePct").textContent = evt.routed_pct;
+    $("refineBest").textContent = evt.best_pct;
+  } else if (evt.type === "result") showResults(evt.report, evt.report.output);
   else if (evt.type === "log") appendLog(evt.line);
 });
 
 $("pickBoard").addEventListener("click", pickBoard);
 $("run").addEventListener("click", run);
+$("refine").addEventListener("click", runRefine);
 $("changePython").addEventListener("click", async () => {
   setPillWait("Selecting…");
   const info = await window.api.pickPython();
