@@ -11,14 +11,15 @@ from __future__ import annotations
 
 import random
 
-from . import (anneal, blocks, floorplan as floorplan_mod, forcedirected,
+from . import (anneal, blocks, edge as edge_mod, floorplan as floorplan_mod, forcedirected,
                legalize as legal_mod, metrics)
 from .model import Board
 
 
 def place(board: Board, *, seed: int = 0, grid: float = 0.5, margin: float = 0.8,
           iters: int = 400, sa_steps: int | None = None,
-          strategy: str = "auto", progress=None) -> dict:
+          strategy: str = "auto", progress=None,
+          connectors: list[str] | None = None) -> dict:
     """strategy: 'auto' (force-directed seed, floorplan only via cohesion),
     'floorplan' (force the region floorplan seed), 'compact' (force-directed).
 
@@ -31,6 +32,13 @@ def place(board: Board, *, seed: int = 0, grid: float = 0.5, margin: float = 0.8
 
     before = metrics.summary(board)
     _report("analyze", 0.05)
+
+    # An explicit connector set (from the app's sidecar) overrides the
+    # refdes/footprint auto-guess: exactly these refs are connectors.
+    if connectors is not None:
+        conn_set = set(connectors)
+        for c in board.components.values():
+            c.is_connector = c.ref in conn_set
 
     block_map = blocks.detect_blocks(board)
     n_blocks = len(set(block_map.values()))
@@ -66,6 +74,10 @@ def place(board: Board, *, seed: int = 0, grid: float = 0.5, margin: float = 0.8
         forcedirected.seed_positions(board, rng, margin=margin)
         forcedirected.run(board, rng, iters=fd_iters, margin=margin)
     _report("seed", 0.15)
+
+    if connectors:
+        edge_mod.assign_edges(board, connectors, margin=margin)
+
     if sa_steps:
         # anneal reports 0..1 over its loop; map it onto the 0.15..0.92 band.
         anneal.anneal(board, seed=seed, steps=sa_steps, margin=margin,
