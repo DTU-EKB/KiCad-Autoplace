@@ -89,14 +89,25 @@ def assign_edges(board: Board, connectors, margin: float = 0.8) -> None:
         _set_along(c, cy if c.edge in ("L", "R") else cx)
         pin_to_edge(c, board, margin)
         _clamp_along(c, board, margin)
-    # de-collide connectors sharing an edge: sort along the edge, push apart
+    # de-collide connectors sharing an edge: keep their net-affinity order,
+    # enforce a margin gap, and respect the edge's usable span. Forward pass
+    # sets minimum spacing from below; backward pass pulls any connector that
+    # overran the far end back, fixing clamp-induced overlaps on a crowded edge.
     for e in EDGES:
         group = sorted((c for c in conns if c.edge == e), key=_along)
-        for i in range(1, len(group)):
-            prev, cur = group[i - 1], group[i]
-            need = (_span(prev) + _span(cur)) / 2 + margin
-            if _along(cur) - _along(prev) < need:
-                _set_along(cur, _along(prev) + need)
-        for c in group:
+        for i, c in enumerate(group):
             _clamp_along(c, board, margin)
+            if i > 0:
+                prev = group[i - 1]
+                need = (_span(prev) + _span(c)) / 2 + margin
+                if _along(c) - _along(prev) < need:
+                    _set_along(c, _along(prev) + need)
+                    _clamp_along(c, board, margin)
+        for i in range(len(group) - 2, -1, -1):
+            cur, nxt = group[i], group[i + 1]
+            need = (_span(cur) + _span(nxt)) / 2 + margin
+            if _along(nxt) - _along(cur) < need:
+                _set_along(cur, _along(nxt) - need)
+                _clamp_along(cur, board, margin)
+        for c in group:
             pin_to_edge(c, board, margin)
