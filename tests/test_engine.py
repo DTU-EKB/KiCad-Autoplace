@@ -134,3 +134,23 @@ def test_all_parts_inside_outline():
     for c in b.components.values():
         assert c.left >= b.x0 - 1e-6 and c.right <= b.x1 + 1e-6
         assert c.top >= b.y0 - 1e-6 and c.bottom <= b.y1 + 1e-6
+
+
+def test_edge_connector_stays_on_its_edge_through_anneal():
+    from autoplace import anneal, edge
+    b = Board(0, 0, 100, 60)
+    b.components = {
+        "J1": Component("J1", 4, 4, x=50, y=30,
+                        pads=[Pad("1", "SIG", 0.0, 0.0)]),
+        "R1": _two_pin("R1", 20, 20, "SIG", "N1"),
+        "R2": _two_pin("R2", 80, 40, "N1", "N2"),
+        "R3": _two_pin("R3", 60, 10, "N2", "GND"),
+    }
+    edge.assign_edges(b, ["J1"], margin=0.8)
+    j = b.components["J1"]
+    assert j.edge in ("L", "R", "T", "B")
+    pinned_axis = j.x if j.edge in ("L", "R") else j.y
+    anneal.anneal(b, seed=0, steps=3000, margin=0.8)
+    j = b.components["J1"]
+    moved_axis = j.x if j.edge in ("L", "R") else j.y
+    assert abs(moved_axis - pinned_axis) <= 1e-6   # never left the edge line
