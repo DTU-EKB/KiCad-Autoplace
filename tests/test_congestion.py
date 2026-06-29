@@ -65,8 +65,23 @@ def test_pressure_zero_outside_and_for_empty(tmp_path):
     assert empty.pressure_at(10, 10) == 0.0
 
 
-def test_high_detour_net_adds_pressure(tmp_path):
-    # net A routed length is large vs its straight pad span (5,5)->(15,15);
-    # detour pressure should land in the corner cell.
-    field = congestion.parse(_write(tmp_path, SAMPLE_SES), _board(), cell_mm=20.0)
-    assert field.pressure_at(10, 10) > 0.0
+def test_detour_adds_pressure_independent_of_density(tmp_path):
+    # Same single wire (identical density) for net A in both boards; only the
+    # pad span differs, so only the detour ratio differs. The high-detour board
+    # must show MORE pressure in the wire's cell -- proving the detour term
+    # contributes on top of density.
+    ses = """(session t (routes (resolution um 10) (network_out
+      (net A (wire (path F.Cu 10000 50000 -50000 150000 -50000 150000 -150000)))
+    )))"""
+
+    def board(p2x, p2y):
+        b = Board(0, 0, 200, 200)
+        b.components = {
+            "A1": Component("A1", 2, 2, x=5, y=5, pads=[Pad("1", "A", 0, 0)]),
+            "A2": Component("A2", 2, 2, x=p2x, y=p2y, pads=[Pad("1", "A", 0, 0)]),
+        }
+        return b
+
+    f_low = congestion.parse(_write(tmp_path, ses), board(15, 15), cell_mm=20.0)
+    f_high = congestion.parse(_write(tmp_path, ses), board(6, 6), cell_mm=20.0)
+    assert f_high.pressure_at(10, 10) > f_low.pressure_at(10, 10)
