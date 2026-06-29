@@ -168,3 +168,28 @@ def test_legalize_keeps_edge_connector_on_edge():
     x_before = b.components["J1"].x
     legalize.legalize(b, grid=0.5, margin=0.8)
     assert abs(b.components["J1"].x - x_before) <= 1e-6
+
+
+def test_place_pins_explicit_connectors_to_edges():
+    # hierarchical board so the floorplan path runs; J1 wired into block A
+    b = Board(0, 0, 120, 80)
+    b.components = {
+        "J1": Component("J1", 4, 4, x=60, y=40, sheet="/A/",
+                        pads=[Pad("1", "SIG", 0.0, 0.0)]),
+        "A1": _two_pin("A1", 20, 20, "SIG", "a1"),
+        "A2": _two_pin("A2", 24, 20, "a1", "a2"),
+        "B1": _two_pin("B1", 100, 60, "b1", "b2"),
+        "B2": _two_pin("B2", 96, 60, "b2", "b3"),
+    }
+    b.components["A1"].sheet = b.components["A2"].sheet = "/A/"
+    b.components["B1"].sheet = b.components["B2"].sheet = "/B/"
+    engine.place(b, seed=0, connectors=["J1"])
+    j = b.components["J1"]
+    assert j.edge in ("L", "R", "T", "B")
+    # courtyard sits against its edge within one margin
+    on_edge = (
+        abs(j.left - b.x0) <= 0.8 + 1e-6 or abs(j.right - b.x1) <= 0.8 + 1e-6 or
+        abs(j.top - b.y0) <= 0.8 + 1e-6 or abs(j.bottom - b.y1) <= 0.8 + 1e-6
+    )
+    assert on_edge
+    assert metrics.overlaps(b) == []
