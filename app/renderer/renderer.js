@@ -20,8 +20,9 @@ function blockColor(block, blockList) {
   return BLOCK_COLORS[(i < 0 ? 0 : i) % BLOCK_COLORS.length];
 }
 
-function renderBoard(geom) {
-  const host = $("boardCanvas");
+// Build the inner SVG (outline + footprint rects) for a board geometry.
+// `labels` adds the refdes text (skipped for tiny gallery thumbnails).
+function boardSvgMarkup(geom, { labels = true } = {}) {
   const o = geom.outline;
   const W = o.x1 - o.x0;
   const H = o.y1 - o.y0;
@@ -32,20 +33,29 @@ function renderBoard(geom) {
       const y = f.y - f.h / 2 - o.y0;
       const conn = state.connectors.has(f.ref);
       const col = blockColor(f.block, blockList);
+      const text = labels
+        ? `<text x="${(x + 0.3).toFixed(2)}" y="${(y + 2).toFixed(2)}">${f.ref}</text>`
+        : "";
       return (
         `<g class="fp${conn ? " conn" : ""}" data-ref="${f.ref}">` +
         `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${Math.max(f.w, 0.5).toFixed(2)}" ` +
         `height="${Math.max(f.h, 0.5).toFixed(2)}" fill="${col}" fill-opacity="0.5" stroke="${col}"/>` +
-        `<text x="${(x + 0.3).toFixed(2)}" y="${(y + 2).toFixed(2)}">${f.ref}</text>` +
+        text +
         `</g>`
       );
     })
     .join("");
-  host.innerHTML =
-    `<svg viewBox="0 0 ${W.toFixed(1)} ${H.toFixed(1)}">` +
+  const inner =
     `<rect x="0" y="0" width="${W.toFixed(1)}" height="${H.toFixed(1)}" fill="none" stroke="#333"/>` +
-    parts +
-    `</svg>`;
+    parts;
+  return { W, H, inner };
+}
+
+function renderBoard(geom) {
+  const host = $("boardCanvas");
+  const { W, H, inner } = boardSvgMarkup(geom, { labels: true });
+  host.innerHTML =
+    `<svg viewBox="0 0 ${W.toFixed(1)} ${H.toFixed(1)}">` + inner + `</svg>`;
   host.querySelectorAll(".fp").forEach((g) => {
     g.addEventListener("click", () => toggleConnector(g.dataset.ref));
   });
@@ -98,6 +108,9 @@ const state = {
   geometry: null,
   connectors: new Set(),
   refineToolsOk: false, // Java + FreeRouting jar present
+  candidates: [], // [{seed, hpwl_mm, crossings, hpwl_delta_pct, board}]
+  committedSeed: null, // seed of the candidate the user picked
+  refineBoard: null, // board Refine should operate on (the committed output)
 };
 
 // ---- python status ---------------------------------------------------------
@@ -168,6 +181,7 @@ function stageLabel(stage) {
   return (
     {
       load: "Loading board…",
+      place: "Placing candidates…",
       analyze: "Analyzing connectivity…",
       seed: "Seeding layout…",
       anneal: "Optimizing placement…",
@@ -231,6 +245,65 @@ function showResults(report, output) {
   badge.textContent = `${report.overlaps_remaining === 0 ? "overlap-free" : "needs review"} · seed ${report.seed}`;
 }
 
+// ---- candidate gallery -----------------------------------------------------
+function resetGallery() {
+  state.candidates = [];
+  $("galleryGrid").innerHTML = "";
+  $("gallery").hidden = false;
+  $("galleryNote").textContent = "generating candidates…";
+}
+
+function addCandidateCard(cand) {
+  state.candidates.push(cand);
+  const grid = $("galleryGrid");
+  const card = document.createElement("div");
+  card.className = "cand";
+  card.dataset.seed = String(cand.seed);
+  const { W, H, inner } = boardSvgMarkup(cand.board, { labels: false });
+  const delta =
+    cand.hpwl_delta_pct === null || cand.hpwl_delta_pct === undefined
+      ? ""
+      : `<span class="cand-delta ${cand.hpwl_delta_pct < 0 ? "delta-good" : "delta-bad"}">` +
+        `${cand.hpwl_delta_pct > 0 ? "+" : ""}${cand.hpwl_delta_pct}%</span>`;
+  card.innerHTML =
+    `<div class="cand-thumb"><svg viewBox="0 0 ${W.toFixed(1)} ${H.toFixed(1)}">${inner}</svg></div>` +
+    `<div class="cand-meta">` +
+    `<span class="cand-seed">seed ${cand.seed}</span>` +
+    `<span class="cand-badge" hidden>best</span>` +
+    `</div>` +
+    `<div class="cand-metrics">` +
+    `${fmt(Math.round(cand.hpwl_mm))} mm ${delta} · ${fmt(cand.crossings)} crossings</div>`;
+  card.addEventListener("click", () => commitSeed(cand.seed));
+  grid.appendChild(card);
+  markBestCandidate();
+}
+
+function addCandidateError(cand) {
+  const grid = $("galleryGrid");
+  const card = document.createElement("div");
+  card.className = "cand cand-failed";
+  card.innerHTML =
+    `<div class="cand-thumb cand-thumb-empty">✕</div>` +
+    `<div class="cand-meta"><span class="cand-seed">seed ${cand.seed}</span></div>` +
+    `<div class="cand-metrics">failed: ${cand.error || "placement error"}</div>`;
+  grid.appendChild(card);
+}
+
+function markBestCandidate() {
+  const ok = state.candidates;
+  if (!ok.length) return;
+  let best = ok[0];
+  for (const c of ok) if (c.hpwl_mm < best.hpwl_mm) best = c;
+  $("galleryGrid")
+    .querySelectorAll(".cand-badge")
+    .forEach((b) => (b.hidden = true));
+  const card = $("galleryGrid").querySelector(`.cand[data-seed="${best.seed}"]`);
+  if (card) {
+    const badge = card.querySelector(".cand-badge");
+    if (badge) badge.hidden = false;
+  }
+}
+
 async function run() {
   if (state.running) return;
   state.running = true;
@@ -238,30 +311,75 @@ async function run() {
   refreshRunEnabled();
   $("results").hidden = true;
   $("log").textContent = "";
+  resetGallery();
   setProgress("load", 0);
 
-  const opts = {
+  const res = await window.api.runPlaceMulti({
     board: state.board,
     python: state.python,
     strategy: $("strategy").value,
-    seed: parseInt($("seed").value, 10) || 0,
-  };
-
-  const res = await window.api.runPlace(opts);
+    count: 6,
+  });
 
   state.running = false;
   refreshRunEnabled();
 
   if (res.ok) {
     setProgress("done", 100);
-    showResults(res.report, res.output);
-    const dump = await window.api.dumpBoard({
-      python: state.python,
+    $("galleryNote").textContent = `${res.count} candidates — click one to use it`;
+  } else if (res.cancelled) {
+    setProgress("done", 0);
+    $("progressStage").textContent = "Cancelled";
+    $("galleryNote").textContent = state.candidates.length
+      ? `${state.candidates.length} candidates (cancelled) — click one to use it`
+      : "cancelled";
+  } else {
+    setProgress("done", 100);
+    $("progressStage").textContent = "Failed";
+    $("galleryNote").textContent = "no candidates produced";
+    appendLog("ERROR: " + res.error);
+    openLog(true);
+  }
+}
+
+// Commit a previewed candidate: re-run the single-seed place (deterministic, so
+// the saved board matches the thumbnail), then show results + the chosen board.
+async function commitSeed(seed) {
+  if (state.running) return;
+  state.running = true;
+  $("cancel").disabled = false;
+  refreshRunEnabled();
+  $("galleryGrid")
+    .querySelectorAll(".cand")
+    .forEach((c) => c.classList.toggle("cand-selected", c.dataset.seed === String(seed)));
+  $("results").hidden = true;
+  setProgress("load", 0);
+  $("progressStage").textContent = `Saving seed ${seed}…`;
+
+  const res = await window.api.runPlace({
+    board: state.board,
+    python: state.python,
+    strategy: $("strategy").value,
+    seed,
+  });
+
+  state.running = false;
+  refreshRunEnabled();
+
+  if (res.ok) {
+    setProgress("done", 100);
+    state.committedSeed = seed;
+    state.refineBoard = res.output;
+    // carry the connector set next to the saved board so Refine keeps edge pins
+    await window.api.saveConnectors({
       board: res.output,
+      connectors: [...state.connectors],
     });
+    showResults(res.report, res.output);
+    const dump = await window.api.dumpBoard({ python: state.python, board: res.output });
     if (dump.ok) {
       state.geometry = dump.geometry;
-      $("boardMode").textContent = "after placement";
+      $("boardMode").textContent = `after placement · seed ${seed}`;
       renderBoard(state.geometry);
     }
   } else if (res.cancelled) {
@@ -290,9 +408,9 @@ async function runRefine() {
   $("refineBest").textContent = "–";
 
   const res = await window.api.runRefine({
-    board: state.board,
+    board: state.refineBoard || state.board,
     python: state.python,
-    seed: parseInt($("seed").value, 10) || 0,
+    seed: state.committedSeed ?? 0,
     budget: eff.budget,
     passes: eff.passes,
   });
@@ -337,7 +455,11 @@ function openLog(force) {
 // ---- wire up ---------------------------------------------------------------
 window.api.onPlaceEvent((evt) => {
   if (evt.type === "progress") setProgress(evt.stage, evt.percent);
-  else if (evt.type === "iteration") {
+  else if (evt.type === "candidate") addCandidateCard(evt);
+  else if (evt.type === "candidate-error") addCandidateError(evt);
+  else if (evt.type === "done") {
+    /* gallery completion handled by the run() resolve */
+  } else if (evt.type === "iteration") {
     const budget = evt.budget || 1;
     setProgress("refine", Math.round((evt.iter / budget) * 100));
     $("progressStage").textContent = `Refining — iteration ${evt.iter}/${budget}`;
