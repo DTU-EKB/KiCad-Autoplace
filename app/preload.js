@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld("api", {
   pickPython: () => ipcRenderer.invoke("pick-python"),
   pickBoard: () => ipcRenderer.invoke("pick-board"),
   runPlace: (opts) => ipcRenderer.invoke("run-place", opts),
+  runRefine: (opts) => ipcRenderer.invoke("run-refine", opts),
   revealPath: (p) => ipcRenderer.invoke("reveal-path", p),
   devConfig: () => ipcRenderer.invoke("dev-config"),
   dumpBoard: (opts) => ipcRenderer.invoke("dump-board", opts),

@@ -173,6 +173,69 @@ function runPlace(win, { board, python, strategy, seed }) {
   });
 }
 
+function runRefine(win, { board, python, seed }) {
+  return new Promise((resolve) => {
+    if (!fs.existsSync(CLI_PY)) {
+      return resolve({ ok: false, error: `cli.py not found at ${CLI_PY}` });
+    }
+    const stem = board.replace(/\.kicad_pcb$/i, "");
+    const out = stem + ".refined.kicad_pcb";
+    const send = (evt) => {
+      if (!win.isDestroyed()) win.webContents.send("place-event", evt);
+    };
+    const env = { ...process.env, AUTOPLACE_STREAM: "1" };
+    const args = [CLI_PY, "refine", board, out, String(seed ?? 0)];
+    send({ type: "log", line: `$ ${python} cli.py refine "${board}" ...` });
+
+    let proc;
+    try {
+      proc = spawn(python, args, { cwd: REPO_ROOT, env });
+    } catch (e) {
+      return resolve({ ok: false, error: String(e) });
+    }
+    let stdoutBuf = "";
+    let result = null;
+    const handleLine = (line) => {
+      const t = line.trim();
+      if (!t) return;
+      if (t.startsWith("{")) {
+        try {
+          const obj = JSON.parse(t);
+          if (obj.type === "iteration") return send({ type: "iteration", ...obj });
+          if (obj.type === "progress")
+            return send({ type: "progress", stage: obj.stage, percent: obj.percent });
+          if (obj.type === "result") {
+            result = obj;
+            return send({ type: "result", report: obj });
+          }
+        } catch {
+          /* fall through to log */
+        }
+      }
+      send({ type: "log", line });
+    };
+    proc.stdout.on("data", (chunk) => {
+      stdoutBuf += chunk.toString();
+      let nl;
+      while ((nl = stdoutBuf.indexOf("\n")) >= 0) {
+        handleLine(stdoutBuf.slice(0, nl));
+        stdoutBuf = stdoutBuf.slice(nl + 1);
+      }
+    });
+    proc.stderr.on("data", (chunk) =>
+      chunk.toString().split("\n").forEach((l) => l.trim() && send({ type: "log", line: l }))
+    );
+    proc.on("error", (e) =>
+      resolve({ ok: false, error: `failed to start python: ${e.message}` })
+    );
+    proc.on("close", (code) => {
+      if (stdoutBuf.trim()) handleLine(stdoutBuf);
+      if (result) resolve({ ok: true, report: result, output: out });
+      else resolve({ ok: false, error: `refine exited ${code} without a result (check the log)` });
+    });
+  });
+}
+
 function dumpBoard(python, board) {
   return new Promise((resolve) => {
     if (!fs.existsSync(CLI_PY)) {
@@ -232,6 +295,8 @@ function registerIpc(win) {
   });
 
   ipcMain.handle("run-place", (_e, opts) => runPlace(win, opts));
+
+  ipcMain.handle("run-refine", (_e, opts) => runRefine(win, opts));
 
   ipcMain.handle("dump-board", (_e, { python, board }) =>
     dumpBoard(python, board)
