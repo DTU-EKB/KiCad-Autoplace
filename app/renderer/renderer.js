@@ -111,6 +111,7 @@ const state = {
   candidates: [], // [{seed, hpwl_mm, crossings, hpwl_delta_pct, board}]
   committedSeed: null, // seed of the candidate the user picked
   refineBoard: null, // board Refine should operate on (the committed output)
+  lastFinished: null, // best guess at the finished routed board (for Finalize)
 };
 
 // ---- python status ---------------------------------------------------------
@@ -164,6 +165,8 @@ function refreshRunEnabled() {
   $("run").disabled = !ready;
   const refineBtn = $("refine");
   if (refineBtn) refineBtn.disabled = !ready || !state.refineToolsOk;
+  const fin = $("finalize");
+  if (fin) fin.disabled = !ready;
   const cancel = $("cancel");
   if (cancel) cancel.hidden = !state.running;       // only visible mid-run
 }
@@ -425,6 +428,8 @@ async function runRefine() {
   if (res.ok) {
     setProgress("done", 100);
     showResults(res.report, res.output);
+    // the routed board is the natural "finished" board to finalize
+    state.lastFinished = res.report.routed_output || res.output;
     $("refineBest").textContent = res.report.routed_pct;
     if (Array.isArray(res.report.history) && res.report.history.length) {
       $("refineHistory").textContent =
@@ -444,6 +449,53 @@ async function runRefine() {
     setProgress("done", 100);
     $("progressStage").textContent = "Refine failed";
     appendLog("ERROR: " + res.error);
+    openLog(true);
+  }
+}
+
+// ---- finalize --------------------------------------------------------------
+// Promote a finished routed board to be the project's main .kicad_pcb and sweep
+// the intermediates. Picks the finished file (default = last routed output),
+// then the main process shows a native confirm before anything destructive.
+async function finalizeProject() {
+  if (state.running || !state.board) return;
+  const finished = await window.api.pickBoard({
+    title: "Select the finished routed board to finalize",
+    defaultPath: state.lastFinished || state.output || state.board,
+  });
+  if (!finished) return;
+
+  state.running = true;
+  refreshRunEnabled();
+  const res = await window.api.finalize({
+    python: state.python,
+    finished,
+    project: state.board,
+  });
+  state.running = false;
+  refreshRunEnabled();
+
+  if (res.ok) {
+    const r = res.result;
+    appendLog(
+      (r.promoted ? `Finalized → ${state.board}` : "Finalized (no promote)") +
+        ` · deleted ${r.deleted.length} temp file${r.deleted.length === 1 ? "" : "s"}` +
+        (r.backup ? ` · backup ${r.backup}` : "")
+    );
+    if (r.errors && r.errors.length) {
+      appendLog("Could not delete: " + r.errors.map((e) => e.file).join(", "));
+      openLog(true);
+    }
+    // the project board now holds the finished design — refresh the view
+    state.lastFinished = null;
+    state.output = null;
+    $("results").hidden = true;
+    await loadBoardView();
+    $("boardMode").textContent = "finalized project board";
+  } else if (res.cancelled) {
+    appendLog("Finalize cancelled.");
+  } else {
+    appendLog("Finalize failed: " + res.error);
     openLog(true);
   }
 }
@@ -478,6 +530,7 @@ window.api.onPlaceEvent((evt) => {
 $("pickBoard").addEventListener("click", pickBoard);
 $("run").addEventListener("click", run);
 $("refine").addEventListener("click", runRefine);
+$("finalize").addEventListener("click", finalizeProject);
 $("cancel").addEventListener("click", async () => {
   $("cancel").disabled = true;
   $("progressStage").textContent = "Cancelling…";

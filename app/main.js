@@ -402,6 +402,82 @@ function dumpBoard(python, board) {
   });
 }
 
+// Run a one-shot cli.py subcommand and return the parsed JSON objects it emits.
+function runCliJson(python, args) {
+  return new Promise((resolve) => {
+    if (!fs.existsSync(CLI_PY)) {
+      return resolve({ ok: false, error: `cli.py not found at ${CLI_PY}` });
+    }
+    let proc;
+    try {
+      proc = spawn(python, [CLI_PY, ...args], { cwd: REPO_ROOT });
+    } catch (e) {
+      return resolve({ ok: false, error: String(e) });
+    }
+    let out = "";
+    let err = "";
+    proc.stdout.on("data", (d) => (out += d.toString()));
+    proc.stderr.on("data", (d) => (err += d.toString()));
+    proc.on("error", (e) => resolve({ ok: false, error: e.message }));
+    proc.on("close", (code) => {
+      const objs = [];
+      for (const line of out.split("\n")) {
+        const t = line.trim();
+        if (t.startsWith("{")) {
+          try {
+            objs.push(JSON.parse(t));
+          } catch {
+            /* ignore non-JSON */
+          }
+        }
+      }
+      if (code !== 0 && !objs.length) {
+        return resolve({ ok: false, error: err.trim() || `exited ${code}` });
+      }
+      resolve({ ok: true, objs });
+    });
+  });
+}
+
+// Finalize: dry-run for the plan -> native confirm -> commit.
+async function runFinalize(win, { python, finished, project }) {
+  const dry = await runCliJson(python, ["finalize", finished, project]);
+  if (!dry.ok) return { ok: false, error: dry.error };
+  const plan = dry.objs.find((o) => o.type === "plan");
+  const planErr = dry.objs.find((o) => o.type === "error");
+  if (planErr) return { ok: false, error: planErr.error };
+  if (!plan) return { ok: false, error: "no finalize plan returned" };
+
+  const del = plan.delete || [];
+  const promoteLine = plan.promote
+    ? `Promote:\n  ${path.basename(plan.promote.from)}  →  ${path.basename(plan.promote.to)}\n` +
+      `Backup current board → ${path.basename(plan.backup)}\n\n`
+    : "The selected board is already the project board — nothing to promote.\n\n";
+  const detail =
+    promoteLine +
+    (del.length
+      ? `Delete ${del.length} temporary file${del.length === 1 ? "" : "s"}:\n  ` +
+        del.join("\n  ")
+      : "No temporary files to delete.");
+
+  const { response } = await dialog.showMessageBox(win, {
+    type: "warning",
+    buttons: ["Finalize", "Cancel"],
+    defaultId: 1,
+    cancelId: 1,
+    title: "Finalize project",
+    message: "Finalize this board as the project's main PCB?",
+    detail,
+  });
+  if (response !== 0) return { ok: false, cancelled: true };
+
+  const run = await runCliJson(python, ["finalize", finished, project, "--commit"]);
+  if (!run.ok) return { ok: false, error: run.error };
+  const result = run.objs.find((o) => o.type === "result");
+  if (!result) return { ok: false, error: "finalize did not report a result" };
+  return { ok: true, result };
+}
+
 // --- IPC --------------------------------------------------------------------
 function registerIpc(win) {
   ipcMain.handle("detect-python", () => detectPython());
@@ -422,9 +498,10 @@ function registerIpc(win) {
     return { pythonPath: py, kicadVersion: ver };
   });
 
-  ipcMain.handle("pick-board", async () => {
+  ipcMain.handle("pick-board", async (_e, opts) => {
     const r = await dialog.showOpenDialog(win, {
-      title: "Select a KiCad board",
+      title: (opts && opts.title) || "Select a KiCad board",
+      defaultPath: (opts && opts.defaultPath) || undefined,
       properties: ["openFile"],
       filters: [{ name: "KiCad PCB", extensions: ["kicad_pcb"] }],
     });
@@ -435,6 +512,8 @@ function registerIpc(win) {
   ipcMain.handle("run-place-multi", (_e, opts) => runPlaceMulti(win, opts));
 
   ipcMain.handle("run-refine", (_e, opts) => runRefine(win, opts));
+
+  ipcMain.handle("finalize", (_e, opts) => runFinalize(win, opts));
 
   ipcMain.handle("cancel-run", () => {
     if (activeProc) {
