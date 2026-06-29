@@ -5,8 +5,15 @@ escape local minima (nudge + swap). Cost is evaluated *incrementally* -- only th
 nets and pairs touching the moved component(s) are recomputed -- so thousands of
 moves run in a fraction of a second even on the 131-part system board.
 
-Cost = HPWL(signal) + overlap-area(hard) + routing-channel + connector-edge
-       + block-cohesion.
+Two distinct costs, deliberately:
+  * SEARCH cost (guides which moves are accepted) =
+        HPWL(signal) + overlap-area(hard) + routing-channel + connector-edge
+        + block-cohesion.
+  * SELECTION cost (decides which visited layout we keep, ``_quality``) =
+        HPWL(signal) + overlap-area(hard) only.
+The soft terms (channel / cohesion / edge) shape the search but must NOT pick the
+returned layout: ranking by the full cost made the engine discard the low-HPWL
+layouts it found and return overlap/cohesion-optimal but wirelength-bad ones.
 
 Moves: nudge (translate), rotate (0/90/180/270) and swap. Overlap is a hard
 barrier in the cost, and the final legalize step guarantees an overlap-free board.
@@ -89,6 +96,31 @@ class Annealer:
         cx, cy = self.centroids.get(c.block, (c.x, c.y))
         return math.hypot(c.x - cx, c.y - cy)
 
+    def _quality(self) -> float:
+        """Selection metric: wirelength + the hard overlap barrier only.
+
+        The soft terms (channel / cohesion / connector-edge) shape the *search* --
+        they bias which moves the annealer accepts -- but they must NOT decide which
+        of the visited layouts we keep. Including them (as the old full-cost ``best``
+        tracking did) pulls the retained layout away from the low-wirelength ones the
+        anneal actually finds: cohesion alone could trade ~2000 mm of HPWL for parts
+        sitting tighter on their block centroids, so the engine routinely *returned a
+        worse layout than it had already visited*. Ranking kept layouts by placement
+        quality fixes that.
+        """
+        q = sum(self._net_hpwl(n) for n in self.net_members)
+        m = self.margin
+        comps = self.comps
+        for i in range(len(comps)):
+            a = comps[i]
+            for j in range(i + 1, len(comps)):
+                b = comps[j]
+                ox = m - (abs(a.x - b.x) - (a.eff_w + b.eff_w) / 2)
+                oy = m - (abs(a.y - b.y) - (a.eff_h + b.eff_h) / 2)
+                if ox > 0 and oy > 0:
+                    q += _Weights.OVERLAP * ox * oy
+        return q
+
     def local_cost(self, subset) -> float:
         """Cost attributable to a set of components (for move deltas)."""
         W = _Weights
@@ -128,30 +160,35 @@ class Annealer:
         cooling = (t_end / t0) ** (1.0 / steps)
         T = t0
         best = self._snapshot()
-        best_cost = self._total_cost()
-        running = best_cost
+        best_q = self._quality()              # keep the best layout by QUALITY
         resync_every = max(200, steps // 20)
+        # Sample the quality metric ~300x over the run (O(n^2), so not every step)
+        # and snapshot whenever the layout improves. The seed is the initial best,
+        # so the anneal can never return a layout worse than where it started.
+        sample_every = max(1, steps // 300)
 
         for it in range(steps):
             roll = self.rng.random()
             if roll < 0.55:
-                delta = self._try_nudge(T)
+                self._try_nudge(T)
             elif roll < 0.80:
-                delta = self._try_rotate(T)
+                self._try_rotate(T)
             else:
-                delta = self._try_swap()
-            if delta is not None:
-                running += delta
-                if running < best_cost - 1e-9:
-                    best_cost = running
-                    best = self._snapshot()
+                self._try_swap()
             T *= cooling
+            if (it + 1) % sample_every == 0:
+                q = self._quality()
+                if q < best_q - 1e-9:
+                    best_q = q
+                    best = self._snapshot()
             if (it + 1) % resync_every == 0:
-                self.centroids = block_centroids(self.board)
-                running = self._total_cost()      # cohesion target moved
+                self.centroids = block_centroids(self.board)   # cohesion target moved
                 if progress is not None:
                     progress((it + 1) / steps)
 
+        q = self._quality()                   # don't miss the final state
+        if q < best_q - 1e-9:
+            best = self._snapshot()
         self._restore(best)
 
     def _try_nudge(self, T):
@@ -207,19 +244,6 @@ class Annealer:
     def _revert2(a, b):
         a.x, b.x = b.x, a.x
         a.y, b.y = b.y, a.y
-
-    def _total_cost(self) -> float:
-        W = _Weights
-        cost = sum(W.HPWL * self._net_hpwl(n) for n in self.net_members)
-        for i in range(len(self.comps)):
-            for j in range(i + 1, len(self.comps)):
-                cost += self._pair_penalty(
-                    self.comps[i], self.comps[j], self.margin)
-        for c in self.comps:
-            if c.is_connector:
-                cost += W.EDGE * self._edge_dist(c)
-            cost += self.cohesion * self._cohesion(c)
-        return cost
 
     def _snapshot(self):
         return {c.ref: (c.x, c.y, c.rot) for c in self.free}

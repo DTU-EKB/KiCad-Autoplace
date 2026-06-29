@@ -345,29 +345,38 @@ Front-loaded on placement. Routing/DRC/report are ports (cheap); the weeks go in
 
 ### Measured results (full board suite, final engine vs. hand-placement)
 HPWL excludes power nets; crossings = intersecting MST edges; overlaps always 0.
+Single run, seed 0 (deterministic), after the SA selection-metric fix (see below).
 | Board | Parts | Blocks | HPWL Δ | Crossings (hand → ours) |
 |---|---|---|---|---|
-| feedback_circuit | 10 | 3 | **−69%** | 22 → **1** |
-| motor_feedback | 10 | 2 | **−61%** | 11 → **1** |
-| current_sense | 17 | 6 | **−56%** | 10 → **3** |
-| mppt | 21 | 7 | **−56%** | 17 → **6** |
-| rectifier | 12 | 6 | **−50%** | 11 → **1** |
-| c2000_feedback | 47 | 14 | **−39%** | 9 → **8** |
-| system | 131 | 38 | **−36%** | 438 → **272** |
-| buck | 11 | 4 | **−33%** | 0 → 2 |
-| drive_circuit | 14 | 5 | +14% | 3 → 8 |
-| mppt_buck | 20 | 8 | +16% | 9 → 10 |
-| boost | 11 | 5 | +27% | 0 → 1 |
-| motor_power | 58 | 18 | +91% | 26 → 145 |
+| feedback_circuit | 10 | 3 | **−75%** | 22 → **0** |
+| buck | 11 | 4 | **−70%** | 0 → **0** |
+| motor_feedback | 10 | 2 | **−63%** | 11 → **0** |
+| mppt | 21 | 7 | **−54%** | 17 → **9** |
+| current_sense | 17 | 6 | **−54%** | 10 → **5** |
+| rectifier | 12 | 6 | **−49%** | 11 → **1** |
+| boost | 11 | 5 | **−43%** | 0 → **0** |
+| system | 131 | 6 | **−38%** | 438 → **219** |
+| drive_circuit | 14 | 5 | **−37%** | 3 → **0** |
+| c2000_feedback | 47 | 14 | **−34%** | 9 → **7** |
+| mppt_buck | 20 | 8 | **−34%** | 9 → **5** |
+| motor_power | 58 | 18 | **−11%** | 26 → 27 |
 
-**8 of 12 boards beat hand-placement on wirelength, most with fewer crossings too**, and the
-131-part `system` board improved −36% / 438→272 crossings. All overlap-free and
-deterministic. Known weak cases: tiny tightly-hand-packed boards (`boost`, `drive_circuit`,
-`mppt_buck`, +14–27%) and the dense-but-spacious `motor_power` (35% utilisation, 18 blocks
-half of them singletons — sprawls without a true block floorplan). A connectivity-aware
-floorplanner was prototyped but *hurt* the mid boards (rigid shelf rows), so it was reverted;
-a better floorplan that doesn't disturb the working boards is the main open item, along with
-per-board-class weight presets.
+**All 12 boards now beat hand-placement on wirelength**, most with fewer crossings too, and
+the 131-part `system` board improved −38% / 438→219 crossings — every board overlap-free and
+deterministic. `motor_power` (the dense, spacious power board) is the only modest case at −11%.
+
+**The fix that got here — the SA was returning the wrong layout.** Until this fix the
+annealer kept the layout that minimised its *full* internal cost (HPWL + overlap-barrier +
+routing-channel + connector-edge + block-cohesion). That cost is ~150× dominated by the
+overlap barrier early on, so "best" effectively tracked "fewest overlaps + tightest
+cohesion" and the wirelength of the kept layout drifted freely. The annealer demonstrably
+*visited* excellent layouts (system: HPWL 3119 / 207 crossings) and *returned* far worse ones
+(5159 / 462) — and was so chaotically sensitive that a 0.0015 change in a weight flipped the
+result. The fix (`anneal._quality`): rank kept layouts by **placement quality only**
+(wirelength + overlap barrier); the soft terms still shape the *search* via move acceptance.
+This collapsed run-to-run variance ~3× and turned the four previously-regressing boards
+(`drive_circuit` +14%, `mppt_buck` +16%, `boost` +27%, `motor_power` +91%) into gains. The
+density-adaptive routing-channel term (added in M4b) was *not* the culprit and is kept as-is.
 
 **Delivered (M0–M5):** automatic, connectivity- and block-aware, rotation-capable placement
 with zero hardcoded coordinates, overlap-free and deterministic, running on KiCad 9 and 10,
