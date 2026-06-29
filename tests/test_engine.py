@@ -3,6 +3,7 @@
   python -m pytest tests/
 """
 import os
+import random
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "plugin", "plugins"))
@@ -65,6 +66,48 @@ def test_deterministic():
     for ref in b1.components:
         assert b1.components[ref].x == b2.components[ref].x
         assert b1.components[ref].y == b2.components[ref].y
+
+
+def _cohesion_trap_board(anchors=3):
+    """Two free parts P (sheet A) and Q (sheet B) share net LINK, so wirelength
+    wants them adjacent. Each sheet also has `anchors` LOCKED parts pinned at the
+    opposite edges, dragging each sheet's block centroid outward -- so block
+    cohesion pulls P and Q *apart*, fighting wirelength. P and Q are seeded
+    adjacent in the middle (the low-wirelength layout).
+    """
+    b = Board(0, 0, 80, 24)
+    comps = {
+        "P": Component("P", 4, 2, x=38, y=12, sheet="/A/",
+                       pads=[Pad("1", "LINK", -1.8, 0.0), Pad("2", "up", 1.8, 0.0)]),
+        "Q": Component("Q", 4, 2, x=42, y=12, sheet="/B/",
+                       pads=[Pad("1", "LINK", -1.8, 0.0), Pad("2", "uq", 1.8, 0.0)]),
+    }
+    for k in range(anchors):
+        comps[f"AL{k}"] = Component(f"AL{k}", 2, 2, x=3, y=4 + 6 * k, sheet="/A/",
+                                    locked=True, pads=[Pad("1", f"al{k}", 0.0, 0.0)])
+        comps[f"BL{k}"] = Component(f"BL{k}", 2, 2, x=77, y=4 + 6 * k, sheet="/B/",
+                                    locked=True, pads=[Pad("1", f"bl{k}", 0.0, 0.0)])
+    b.components = comps
+    return b
+
+
+def test_anneal_returns_best_quality_not_lowest_cost():
+    # Regression: the annealer kept the layout minimising its full internal cost
+    # (overlap barrier + block cohesion), discarding the far lower-wirelength
+    # layouts it actually visited. Here strong cohesion drags the two wired parts
+    # apart: old selection returned HPWL ~62 (15x the adjacent seed), while
+    # ranking kept layouts by placement quality (wirelength + overlap only)
+    # returns < 20. Exercised on the annealer directly, independent of the
+    # engine's channel-weight policy.
+    from autoplace import anneal, blocks, legalize
+    for seed in range(4):
+        b = _cohesion_trap_board()
+        blocks.detect_blocks(b)
+        anneal.anneal(b, seed=seed, steps=6000, margin=0.8,
+                      channel_scale=0.0, cohesion_scale=5.0)
+        legalize.legalize(b, grid=0.5, margin=0.8)
+        assert metrics.overlaps(b) == []
+        assert metrics.hpwl(b) < 30, f"seed {seed}: HPWL {metrics.hpwl(b):.0f}"
 
 
 def test_blocks_separates_clusters():
