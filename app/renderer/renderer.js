@@ -242,7 +242,9 @@ function showResults(report, output) {
   state.output = output;
 
   const badge = $("resultBadge");
-  badge.textContent = `${report.overlaps_remaining === 0 ? "overlap-free" : "needs review"} · seed ${report.seed}`;
+  const fab = report.fab ? ` · ${report.fab}` : "";
+  badge.textContent =
+    `${report.overlaps_remaining === 0 ? "overlap-free" : "needs review"} · seed ${report.seed}${fab}`;
 }
 
 // ---- candidate gallery -----------------------------------------------------
