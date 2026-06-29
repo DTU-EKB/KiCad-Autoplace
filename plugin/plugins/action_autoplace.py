@@ -26,27 +26,41 @@ class AutoplaceAction(pcbnew.ActionPlugin):
             self.icon_file_name = icon
 
     def Run(self):
-        board = pcbnew.GetBoard()
-        path = board.GetFileName()
-        model, pcb = kicad_io.load_board(path)
+        # Operate on the board ALREADY OPEN in the editor -- build the model from
+        # it and write positions straight back to the same footprint objects, so
+        # the change shows up live. (Loading a separate copy from disk and saving
+        # over the open file does not update the editor and corrupts the session.)
+        pcb = pcbnew.GetBoard()
+        model = kicad_io.build_model(pcb)
 
         if not model.free():
-            self._msg("Nothing to place", "All footprints are locked.")
+            self._msg("Nothing to place",
+                      "All footprints are locked. Unlock the parts you want the "
+                      "tool to move (keep connectors / mounting holes locked).")
             return
 
-        report = engine.place(model)
-        kicad_io.apply_placement(model, pcb, path)
-        pcbnew.Refresh()
+        try:
+            report = engine.place(model)
+        except Exception as exc:                      # never leave a half-placed board
+            self._msg("Autoplace failed", f"{type(exc).__name__}: {exc}")
+            return
+
+        kicad_io.apply_to_board(model, pcb)
+        try:
+            pcbnew.Refresh()
+        except Exception:
+            pass
 
         b, a = report["before"], report["after"]
         self._msg(
             "Autoplace complete",
-            f"Components: {a['components']}  (free: {len(model.free())})\n"
+            f"Placed {len(model.free())} free of {a['components']} components "
+            f"in {report['blocks']} blocks.\n"
             f"HPWL:      {b['hpwl_mm']:.0f} -> {a['hpwl_mm']:.0f} mm "
             f"({report['hpwl_delta_pct']:+.0f}%)\n"
             f"Crossings: {b['crossings']} -> {a['crossings']}\n"
             f"Overlaps:  {report['overlaps_remaining']}\n\n"
-            "Reload the board if positions don't refresh.",
+            "Review, then save (Ctrl+S) if you want to keep it, or undo (Ctrl+Z).",
         )
 
     @staticmethod

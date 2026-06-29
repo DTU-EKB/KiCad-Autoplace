@@ -32,15 +32,12 @@ def _is_connector(fp) -> bool:
     return any(h in fpid for h in _CONNECTOR_HINTS)
 
 
-def load_board(path: str) -> tuple[Board, "pcbnew.BOARD"]:
-    """Return (model Board, live pcbnew board). Keep the live board to write back."""
-    pcb = pcbnew.LoadBoard(path)
-    if pcb is None:
-        raise RuntimeError(
-            f"KiCad could not load {path!r}. The file is likely saved in a newer "
-            f"KiCad format than this pcbnew ({pcbnew.GetBuildVersion()}). Open it in "
-            f"the matching KiCad version, or run with that version's Python."
-        )
+def build_model(pcb: "pcbnew.BOARD") -> Board:
+    """Build a plain Board model from a live pcbnew board (no disk I/O).
+
+    Used by both ``load_board`` (file path) and the Action Plugin (the board
+    already open in the editor).
+    """
     edge = pcb.GetBoardEdgesBoundingBox()
     board = Board(
         x0=_mm(edge.GetLeft()), y0=_mm(edge.GetTop()),
@@ -71,7 +68,19 @@ def load_board(path: str) -> tuple[Board, "pcbnew.BOARD"]:
                 oy=_mm(pp.y) - cy,
             ))
         board.components[ref] = comp
-    return board, pcb
+    return board
+
+
+def load_board(path: str) -> tuple[Board, "pcbnew.BOARD"]:
+    """Return (model Board, live pcbnew board). Keep the live board to write back."""
+    pcb = pcbnew.LoadBoard(path)
+    if pcb is None:
+        raise RuntimeError(
+            f"KiCad could not load {path!r}. The file is likely saved in a newer "
+            f"KiCad format than this pcbnew ({pcbnew.GetBuildVersion()}). Open it in "
+            f"the matching KiCad version, or run with that version's Python."
+        )
+    return build_model(pcb), pcb
 
 
 def copy_project(src_pcb_path: str, dst_pcb_path: str) -> bool:
@@ -100,18 +109,18 @@ def unrouted_count(pcb: "pcbnew.BOARD") -> int:
         return conn.GetUnconnectedCount()
 
 
-def apply_placement(board: Board, pcb: "pcbnew.BOARD", out_path: str):
-    """Apply each footprint's computed rotation + centre and save to out_path.
+def apply_to_board(board: Board, pcb: "pcbnew.BOARD"):
+    """Apply each footprint's computed rotation + centre to a live board (no save).
 
     Rotation is applied about the footprint's bounding-box centre first (so the
     model's rotated pad offsets match the board exactly -- verified against
     pcbnew's Rotate(+deg): (x, y) -> (y, -x)), then the part is translated so its
-    bbox centre lands on the computed position.
+    bbox centre lands on the computed position. Locked footprints are never moved.
     """
     by_ref = {fp.GetReference(): fp for fp in pcb.GetFootprints()}
     for ref, comp in board.components.items():
         fp = by_ref.get(ref)
-        if fp is None:
+        if fp is None or fp.IsLocked():
             continue
         if comp.rot:
             centre = fp.GetBoundingBox(False).GetCenter()
@@ -121,4 +130,9 @@ def apply_placement(board: Board, pcb: "pcbnew.BOARD", out_path: str):
         dy = pcbnew.FromMM(comp.y) - cur.y
         if dx or dy:
             fp.Move(pcbnew.VECTOR2I(int(dx), int(dy)))
+
+
+def apply_placement(board: Board, pcb: "pcbnew.BOARD", out_path: str):
+    """Apply the placement to ``pcb`` and save to ``out_path`` (CLI / bench path)."""
+    apply_to_board(board, pcb)
     pcbnew.SaveBoard(out_path, pcb)
