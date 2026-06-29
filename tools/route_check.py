@@ -12,8 +12,6 @@ the remaining unrouted connections via pcbnew connectivity. Writes
 import os
 import sys
 
-import pcbnew
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "plugin", "plugins"))
 from autoplace import routing  # noqa: E402
 
@@ -21,23 +19,17 @@ DEFAULT_JAR = os.path.expandvars(r"%USERPROFILE%\.freerouting\freerouting-1.9.0.
 
 
 def route_check(in_pcb, jar=DEFAULT_JAR, passes=10):
-    board = pcbnew.LoadBoard(in_pcb)
-    if board is None:
-        raise SystemExit(f"could not load {in_pcb}")
-    stem = os.path.splitext(in_pcb)[0]
     try:
-        r = routing.route_once(board, jar, passes, stem)
+        r = routing.route_once(in_pcb, jar, passes)
     except RuntimeError as exc:
         print(exc)
         raise SystemExit(1)
-    out = stem + ".routed.kicad_pcb"
-    pcbnew.SaveBoard(out, board)
     print(f"{os.path.basename(in_pcb)}")
     print(f"  connections : {r['total']}")
     print(f"  routed      : {r['routed']}  ({r['pct']:.1f}%)")
     print(f"  unrouted    : {r['unrouted']}")
     print(f"  freerouting : {r['seconds']:.0f}s, {passes} passes")
-    print(f"  -> {out}")
+    print(f"  -> {r['routed_pcb']}")
     return r
 
 

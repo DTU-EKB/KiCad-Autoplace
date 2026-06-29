@@ -38,14 +38,21 @@ def keep_best_loop(initial, route_eval, step, *, budget, patience, margin,
             "history": history}
 
 
-def refine(board, pcb, *, jar, stem, passes=20, seed=0, budget=8, patience=3,
+def refine(board, pcb, *, jar, work_pcb, passes=20, seed=0, budget=8, patience=3,
            margin_conns=1, cell_mm=5.0, progress=None):
     """pcbnew-wired loop. Mutates `board` to the best placement found.
+
+    Each evaluation writes the candidate placement to ``work_pcb`` and routes
+    that file with a FRESH load (``routing.route_once`` reloads it) -- a board
+    cannot be reused across routes after ImportSpecctraSES on KiCad 10. Ensure
+    ``work_pcb``'s ``.kicad_pro`` exists so net-class widths are correct.
 
     Inlines the keep-best/patience policy (rather than calling keep_best_loop)
     so the connection-count margin can be derived from the first route's `total`
     and the initial placement is routed only once.
     """
+    import pcbnew
+
     from . import anneal as anneal_mod
     from . import congestion as cong_mod
     from . import kicad_io
@@ -55,7 +62,8 @@ def refine(board, pcb, *, jar, stem, passes=20, seed=0, budget=8, patience=3,
 
     def route_eval(model):
         kicad_io.apply_to_board(model, pcb)
-        r = routing.route_once(pcb, jar, passes, stem)
+        pcbnew.SaveBoard(work_pcb, pcb)
+        r = routing.route_once(work_pcb, jar, passes)
         state["total"] = r["total"]
         field = cong_mod.parse(r["ses_path"], model, cell_mm=cell_mm)
         return r["pct"], field

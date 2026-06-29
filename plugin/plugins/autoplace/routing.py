@@ -3,6 +3,13 @@
 The only engine module besides ``kicad_io`` that imports ``pcbnew``; it also
 shells out to FreeRouting. Extracted from ``tools/route_check.py`` so the
 refinement loop (``refine.py``) can route a board repeatedly.
+
+``route_once`` takes a board *file path* and loads it FRESH on every call. This
+is deliberate: KiCad 10's pcbnew cannot iterate ``GetTracks()`` after
+``ImportSpecctraSES`` ("SwigPyObject is not iterable"), so a board cannot be
+cleared and reused for a second route. Loading fresh each time sidesteps that
+entirely -- the refine loop saves each candidate placement to a file and routes
+that file.
 """
 from __future__ import annotations
 
@@ -15,24 +22,21 @@ import pcbnew
 from .kicad_io import unrouted_count
 
 
-def clear_tracks(pcb: "pcbnew.BOARD") -> None:
-    """Remove every track and via so the next DSN export is unrouted."""
-    for t in list(pcb.GetTracks()):
-        pcb.Remove(t)
-    pcb.BuildConnectivity()
+def route_once(pcb_path: str, jar: str, passes: int, stem: str = None) -> dict:
+    """Load ``pcb_path`` fresh, route it once with FreeRouting, report completion.
 
-
-def route_once(pcb: "pcbnew.BOARD", jar: str, passes: int, stem: str) -> dict:
-    """Export DSN, run FreeRouting head-less, import the SES, count unrouted.
-
-    Leaves the routed tracks on ``pcb`` (the caller clears them before the next
-    export, which ``clear_tracks`` at the top of this function also does). Writes
-    ``stem.dsn`` and ``stem.ses``.
+    Writes ``stem.dsn`` / ``stem.ses`` / ``stem.routed.kicad_pcb`` (``stem``
+    defaults to the input path without extension). Net-class widths come from the
+    board's ``.kicad_pro`` -- ensure it sits next to ``pcb_path``.
     """
-    clear_tracks(pcb)
-    total = unrouted_count(pcb)                 # ratsnest before routing
+    board = pcbnew.LoadBoard(pcb_path)
+    if board is None:
+        raise RuntimeError(f"could not load {pcb_path}")
+    if stem is None:
+        stem = os.path.splitext(pcb_path)[0]
+    total = unrouted_count(board)               # ratsnest before routing
     dsn, ses = stem + ".dsn", stem + ".ses"
-    if not pcbnew.ExportSpecctraDSN(pcb, dsn):
+    if not pcbnew.ExportSpecctraDSN(board, dsn):
         raise RuntimeError("DSN export failed")
     if os.path.exists(ses):
         os.remove(ses)
@@ -48,11 +52,13 @@ def route_once(pcb: "pcbnew.BOARD", jar: str, passes: int, stem: str) -> dict:
         raise RuntimeError(
             f"FreeRouting produced no usable SES (exit {proc.returncode}).\n{tail}")
 
-    pcbnew.ImportSpecctraSES(pcb, ses)
-    left = unrouted_count(pcb)
+    pcbnew.ImportSpecctraSES(board, ses)
+    left = unrouted_count(board)
     routed = total - left
+    routed_pcb = stem + ".routed.kicad_pcb"
+    pcbnew.SaveBoard(routed_pcb, board)
     return {
         "total": total, "routed": routed, "unrouted": left,
         "pct": (100.0 * routed / total if total else 100.0),
-        "ses_path": ses, "seconds": round(dt, 1),
+        "ses_path": ses, "seconds": round(dt, 1), "routed_pcb": routed_pcb,
     }
