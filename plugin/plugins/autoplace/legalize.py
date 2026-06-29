@@ -24,7 +24,9 @@ def _clamp(c: Component, board: Board, margin: float):
 
 
 def push_apart(board: Board, *, margin: float = 0.8, iters: int = 200):
-    free = {c.ref for c in board.free()}
+    # edge connectors are fixed obstacles here: they were already placed on the
+    # edge and slid along it during annealing; legalize must not move them off.
+    free = {c.ref for c in board.free() if not c.edge}
     comps = list(board.components.values())
     for _ in range(iters):
         moved = False
@@ -64,6 +66,8 @@ def push_apart(board: Board, *, margin: float = 0.8, iters: int = 200):
 def legalize(board: Board, *, grid: float = 0.5, margin: float = 0.8):
     push_apart(board, margin=margin)
     for c in board.free():
+        if c.edge:
+            continue
         c.x = _snap(c.x, grid)
         c.y = _snap(c.y, grid)
         _clamp(c, board, margin)

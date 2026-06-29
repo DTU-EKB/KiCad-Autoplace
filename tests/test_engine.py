@@ -154,3 +154,17 @@ def test_edge_connector_stays_on_its_edge_through_anneal():
     j = b.components["J1"]
     moved_axis = j.x if j.edge in ("L", "R") else j.y
     assert abs(moved_axis - pinned_axis) <= 1e-6   # never left the edge line
+
+
+def test_legalize_keeps_edge_connector_on_edge():
+    from autoplace import edge, legalize
+    b = Board(0, 0, 100, 60)
+    b.components = {
+        "J1": Component("J1", 4, 4, x=50, y=30,
+                        pads=[Pad("1", "SIG", 0.0, 0.0)]),
+        "R1": _two_pin("R1", 90, 30, "SIG", "N1"),   # pulls J1 to edge R
+    }
+    edge.assign_edges(b, ["J1"], margin=0.8)
+    x_before = b.components["J1"].x
+    legalize.legalize(b, grid=0.5, margin=0.8)
+    assert abs(b.components["J1"].x - x_before) <= 1e-6
