@@ -3,10 +3,92 @@
 
 const $ = (id) => document.getElementById(id);
 
+const BLOCK_COLORS = [
+  "#2a78d6", "#1baf7a", "#eda100", "#4a3aa7", "#e87ba4",
+  "#e34948", "#199e70", "#d95926", "#9085e9", "#888781",
+];
+function blockColor(block, blockList) {
+  const i = blockList.indexOf(block);
+  return BLOCK_COLORS[(i < 0 ? 0 : i) % BLOCK_COLORS.length];
+}
+
+function renderBoard(geom) {
+  const host = $("boardCanvas");
+  const o = geom.outline;
+  const W = o.x1 - o.x0;
+  const H = o.y1 - o.y0;
+  const blockList = [...new Set(geom.footprints.map((f) => f.block))].sort();
+  const parts = geom.footprints
+    .map((f) => {
+      const x = f.x - f.w / 2 - o.x0;
+      const y = f.y - f.h / 2 - o.y0;
+      const conn = state.connectors.has(f.ref);
+      const col = blockColor(f.block, blockList);
+      return (
+        `<g class="fp${conn ? " conn" : ""}" data-ref="${f.ref}">` +
+        `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${Math.max(f.w, 0.5).toFixed(2)}" ` +
+        `height="${Math.max(f.h, 0.5).toFixed(2)}" fill="${col}" fill-opacity="0.5" stroke="${col}"/>` +
+        `<text x="${(x + 0.3).toFixed(2)}" y="${(y + 2).toFixed(2)}">${f.ref}</text>` +
+        `</g>`
+      );
+    })
+    .join("");
+  host.innerHTML =
+    `<svg viewBox="0 0 ${W.toFixed(1)} ${H.toFixed(1)}">` +
+    `<rect x="0" y="0" width="${W.toFixed(1)}" height="${H.toFixed(1)}" fill="none" stroke="#333"/>` +
+    parts +
+    `</svg>`;
+  host.querySelectorAll(".fp").forEach((g) => {
+    g.addEventListener("click", () => toggleConnector(g.dataset.ref));
+  });
+  updateConnCount();
+}
+
+function updateConnCount() {
+  $("connCount").textContent = `${state.connectors.size} connectors`;
+}
+
+async function toggleConnector(ref) {
+  if (state.connectors.has(ref)) state.connectors.delete(ref);
+  else state.connectors.add(ref);
+  await window.api.saveConnectors({
+    board: state.board,
+    connectors: [...state.connectors],
+  });
+  renderBoard(state.geometry);
+}
+
+async function loadBoardView() {
+  if (!state.python || !state.board) return;
+  $("boardMode").textContent = "loading…";
+  const res = await window.api.dumpBoard({
+    python: state.python,
+    board: state.board,
+  });
+  if (!res.ok) {
+    $("boardMode").textContent = "could not render board";
+    appendLog("dump error: " + res.error);
+    return;
+  }
+  state.geometry = res.geometry;
+  const saved = await window.api.loadConnectors({ board: state.board });
+  state.connectors = new Set(
+    saved ||
+      res.geometry.footprints
+        .filter((f) => f.is_connector_guess)
+        .map((f) => f.ref)
+  );
+  $("boardView").hidden = false;
+  $("boardMode").textContent = "before placement";
+  renderBoard(state.geometry);
+}
+
 const state = {
   python: null, // verified KiCad python path
   board: null, // selected .kicad_pcb
   running: false,
+  geometry: null,
+  connectors: new Set(),
 };
 
 // ---- python status ---------------------------------------------------------
@@ -52,6 +134,7 @@ async function pickBoard() {
   $("boardPath").textContent = p;
   $("boardPath").classList.remove("muted");
   refreshRunEnabled();
+  loadBoardView();
 }
 
 function refreshRunEnabled() {
@@ -155,6 +238,15 @@ async function run() {
   if (res.ok) {
     setProgress("done", 100);
     showResults(res.report, res.output);
+    const dump = await window.api.dumpBoard({
+      python: state.python,
+      board: res.output,
+    });
+    if (dump.ok) {
+      state.geometry = dump.geometry;
+      $("boardMode").textContent = "after placement";
+      renderBoard(state.geometry);
+    }
   } else {
     setProgress("done", 100);
     $("progressStage").textContent = "Failed";
@@ -200,6 +292,7 @@ async function init() {
     $("boardPath").textContent = dev.board;
     $("boardPath").classList.remove("muted");
     refreshRunEnabled();
+    loadBoardView();
     if (dev.autorun && state.python) run();
   }
 }
