@@ -12,6 +12,10 @@ const fs = require("fs");
 const REPO_ROOT = path.resolve(__dirname, "..");
 const CLI_PY = path.join(REPO_ROOT, "cli.py");
 
+function sidecarPath(board) {
+  return board.replace(/\.kicad_pcb$/i, "") + ".autoplace.json";
+}
+
 // --- KiCad Python discovery -------------------------------------------------
 // kicad_io.py imports pcbnew, which only exists in KiCad's bundled Python.
 // System python will NOT work. We scan the standard install locations and let
@@ -169,6 +173,35 @@ function runPlace(win, { board, python, strategy, seed }) {
   });
 }
 
+function dumpBoard(python, board) {
+  return new Promise((resolve) => {
+    if (!fs.existsSync(CLI_PY)) {
+      return resolve({ ok: false, error: `cli.py not found at ${CLI_PY}` });
+    }
+    let proc;
+    try {
+      proc = spawn(python, [CLI_PY, "dump", board], { cwd: REPO_ROOT });
+    } catch (e) {
+      return resolve({ ok: false, error: String(e) });
+    }
+    let out = "";
+    let err = "";
+    proc.stdout.on("data", (d) => (out += d.toString()));
+    proc.stderr.on("data", (d) => (err += d.toString()));
+    proc.on("error", (e) => resolve({ ok: false, error: e.message }));
+    proc.on("close", (code) => {
+      if (code !== 0) {
+        return resolve({ ok: false, error: err.trim() || `dump exited ${code}` });
+      }
+      try {
+        resolve({ ok: true, geometry: JSON.parse(out) });
+      } catch (e) {
+        resolve({ ok: false, error: "bad dump JSON: " + e.message });
+      }
+    });
+  });
+}
+
 // --- IPC --------------------------------------------------------------------
 function registerIpc(win) {
   ipcMain.handle("detect-python", () => detectPython());
@@ -199,6 +232,31 @@ function registerIpc(win) {
   });
 
   ipcMain.handle("run-place", (_e, opts) => runPlace(win, opts));
+
+  ipcMain.handle("dump-board", (_e, { python, board }) =>
+    dumpBoard(python, board)
+  );
+
+  ipcMain.handle("load-connectors", (_e, { board }) => {
+    const p = sidecarPath(board);
+    try {
+      if (fs.existsSync(p)) {
+        return JSON.parse(fs.readFileSync(p, "utf8")).connectors || null;
+      }
+    } catch {
+      /* fall through */
+    }
+    return null;
+  });
+
+  ipcMain.handle("save-connectors", (_e, { board, connectors }) => {
+    try {
+      fs.writeFileSync(sidecarPath(board), JSON.stringify({ connectors }, null, 2));
+      return true;
+    } catch {
+      return false;
+    }
+  });
 
   // Dev/demo hook: preload a board (and optionally auto-run) from env, so the
   // full GUI flow can be exercised without manual file-dialog navigation.
