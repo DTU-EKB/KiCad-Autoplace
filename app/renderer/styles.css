@@ -356,3 +356,11 @@ input:focus {
   white-space: pre-wrap;
   word-break: break-all;
 }
+
+.board-canvas { width: 100%; overflow: auto; background: #0b0d12; border-radius: 8px; }
+.board-canvas svg { display: block; width: 100%; height: auto; }
+.board-canvas .fp { cursor: pointer; }
+.board-canvas .fp rect { stroke-width: 0.4; }
+.board-canvas .fp.conn rect { stroke: #ffd166; stroke-width: 1.2; }
+.board-canvas .fp text { font: 2px sans-serif; fill: #cfd3dc; pointer-events: none; }
+.board-foot { display: flex; justify-content: space-between; margin-top: 8px; }
