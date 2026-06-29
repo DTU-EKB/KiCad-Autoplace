@@ -19,8 +19,7 @@ from .metrics import _is_power
 from .model import Board
 
 _FANOUT_LIMIT = 6
-_DENSITY = 0.40          # region area = member courtyard area / this (lower = roomier)
-_FILL = 0.90             # spread the whole arrangement to use this much of the board
+_DENSITY = 0.5            # region area = member courtyard area / this
 
 
 def _members(board: Board):
@@ -91,25 +90,20 @@ def floorplan(board: Board, rng, *, margin: float = 0.8):
     total_w = max((pos[b][0] + region[b][0] for b in order), default=avail_w)
     total_h = y + row_h
 
-    # scale the whole arrangement to FILL ~_FILL of the usable area (expanding a
-    # sparse board so the sheets spread out and leave routing channels, not just
-    # shrinking an oversized one). Routability needs the empty space used.
-    avail_h = board.height - 2 * margin
-    sx = (avail_w * _FILL) / total_w if total_w > 0 else 1.0
-    sy = (avail_h * _FILL) / total_h if total_h > 0 else 1.0
-    s = min(sx, sy)
+    # scale the whole arrangement to fit the usable area, then centre it
+    sx = avail_w / total_w if total_w > 0 else 1.0
+    sy = (board.height - 2 * margin) / total_h if total_h > 0 else 1.0
+    s = min(sx, sy, 1.0) if min(sx, sy) < 1.0 else min(sx, sy)
     used_w, used_h = total_w * s, total_h * s
     ox = board.x0 + (board.width - used_w) / 2
     oy = board.y0 + (board.height - used_h) / 2
 
-    anchors = {}
     for blk in order:
         bx, by = pos[blk]
         w, h = region[blk]
         rx0 = ox + bx * s
         ry0 = oy + by * s
         rw, rh = w * s, h * s
-        anchors[blk] = (rx0 + rw / 2, ry0 + rh / 2)   # fixed region centre
         for ref in members[blk]:
             c = board.components[ref]
             if c.locked:
@@ -119,7 +113,6 @@ def floorplan(board: Board, rng, *, margin: float = 0.8):
             hw, hh = c.eff_w / 2, c.eff_h / 2
             c.x = min(max(c.x, board.x0 + hw + margin), board.x1 - hw - margin)
             c.y = min(max(c.y, board.y0 + hh + margin), board.y1 - hh - margin)
-    return anchors
 
 
 def is_hierarchical(board: Board) -> bool:
