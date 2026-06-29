@@ -373,6 +373,33 @@ per-board-class weight presets.
 with zero hardcoded coordinates, overlap-free and deterministic, running on KiCad 9 and 10,
 beating hand-placement on most boards, packaged as a PCM-installable plugin.
 
+### Routability validation with FreeRouting (the ground truth)
+HPWL and MST-crossings are *placement proxies*; the only real test of a placement is whether
+a router can finish it. `tools/route_check.py` exports Specctra DSN → runs FreeRouting 1.9.0
+head-less → imports the SES → counts unrouted connections. Measured on the **131-part system
+board** (10 passes each):
+
+| Placement strategy | FreeRouting routed | HPWL vs hand | MST crossings |
+|---|---|---|---|
+| **Hand placement** (designer, route-iterated) | **100%** (261/261) | baseline | 438 |
+| Hierarchical floorplan (sheets → regions) — **our default** | **86.6%** (226/261) | −23% | 298 |
+| Compact (HPWL-minimal) | 76.3% (199/261) | **−28%** | 361 |
+| Floorplan + fixed anchors + connectors-to-edge | 74.3% | −31% | 314 |
+| Floorplan, over-spread (fill 90%) | 65.5% | −11% | 490 |
+
+**The headline lesson — wirelength is not routability.** Our *lowest-HPWL* layout routed the
+*worst* (76%), and the hand layout has *more* crossings (438) than ours (298) yet routes
+100%. What actually drives routing completion is **spreading each hierarchical sheet into its
+own region with clear channels** — which is why the sheet floorplan (86.6%) beats the
+HPWL-minimal compact layout (76%), and why every "optimise the proxy harder" tweak we tried
+(fixed anchors, fill-the-board, lower density) *reduced* real completion. `route_check.py` is
+therefore the acceptance gate, not the proxies.
+
+**Open gap to "perfect":** 86.6% automated vs 100% hand. Closing it needs a
+**place → route → locate congestion → nudge → re-route feedback loop** (route-driven
+refinement), since the proxies provably can't see the remaining 13%. That is the next
+milestone (M7).
+
 ---
 
 ## 8. Validation plan
