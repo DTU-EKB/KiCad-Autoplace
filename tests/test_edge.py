@@ -54,7 +54,7 @@ def test_connectors_on_same_edge_do_not_overlap():
     a, c = b.components["J1"], b.components["J2"]
     assert a.edge == "L" and c.edge == "L"
     gap = abs(a.y - c.y) - (a.eff_h + c.eff_h) / 2
-    assert gap >= -1e-6
+    assert gap >= 0.8 - 1e-6
 
 
 def test_connector_with_no_signal_partners_still_gets_an_edge():
