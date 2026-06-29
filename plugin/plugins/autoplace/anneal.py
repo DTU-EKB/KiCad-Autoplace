@@ -121,7 +121,8 @@ class Annealer:
         c.y = min(max(c.y, b.y0 + hh + m), b.y1 - hh - m)
 
     # ---- main loop -------------------------------------------------------
-    def run(self, *, steps: int = 6000, t0: float = 8.0, t_end: float = 0.05):
+    def run(self, *, steps: int = 6000, t0: float = 8.0, t_end: float = 0.05,
+            progress=None):
         if len(self.free) < 2:
             return
         cooling = (t_end / t0) ** (1.0 / steps)
@@ -148,6 +149,8 @@ class Annealer:
             if (it + 1) % resync_every == 0:
                 self.centroids = block_centroids(self.board)
                 running = self._total_cost()      # cohesion target moved
+                if progress is not None:
+                    progress((it + 1) / steps)
 
         self._restore(best)
 
@@ -228,7 +231,7 @@ class Annealer:
 
 
 def anneal(board: Board, *, seed: int = 0, steps: int = 6000, margin: float = 0.8,
-           channel_scale: float = 1.0, cohesion_scale: float = 1.0):
+           channel_scale: float = 1.0, cohesion_scale: float = 1.0, progress=None):
     Annealer(board, margin=margin, seed=seed, channel_scale=channel_scale,
-             cohesion_scale=cohesion_scale).run(steps=steps)
+             cohesion_scale=cohesion_scale).run(steps=steps, progress=progress)
     return board

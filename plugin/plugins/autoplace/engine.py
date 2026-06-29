@@ -18,10 +18,19 @@ from .model import Board
 
 def place(board: Board, *, seed: int = 0, grid: float = 0.5, margin: float = 0.8,
           iters: int = 400, sa_steps: int | None = None,
-          strategy: str = "auto") -> dict:
+          strategy: str = "auto", progress=None) -> dict:
     """strategy: 'auto' (force-directed seed, floorplan only via cohesion),
-    'floorplan' (force the region floorplan seed), 'compact' (force-directed)."""
+    'floorplan' (force the region floorplan seed), 'compact' (force-directed).
+
+    ``progress`` is an optional callback ``progress(stage: str, frac: float)``
+    invoked at pipeline milestones (frac in 0..1) so a host UI can show a live
+    bar. It never affects the placement result."""
+    def _report(stage, frac):
+        if progress is not None:
+            progress(stage, max(0.0, min(1.0, frac)))
+
     before = metrics.summary(board)
+    _report("analyze", 0.05)
 
     block_map = blocks.detect_blocks(board)
     n_blocks = len(set(block_map.values()))
@@ -56,13 +65,18 @@ def place(board: Board, *, seed: int = 0, grid: float = 0.5, margin: float = 0.8
     else:
         forcedirected.seed_positions(board, rng, margin=margin)
         forcedirected.run(board, rng, iters=fd_iters, margin=margin)
+    _report("seed", 0.15)
     if sa_steps:
+        # anneal reports 0..1 over its loop; map it onto the 0.15..0.92 band.
         anneal.anneal(board, seed=seed, steps=sa_steps, margin=margin,
                       channel_scale=channel_scale,
-                      cohesion_scale=2.5 if use_floorplan else 1.0)
+                      cohesion_scale=2.5 if use_floorplan else 1.0,
+                      progress=lambda f: _report("anneal", 0.15 + 0.77 * f))
     remaining = legal_mod.legalize(board, grid=grid, margin=margin)
+    _report("legalize", 0.96)
 
     after = metrics.summary(board)
+    _report("done", 1.0)
     return {
         "before": before,
         "after": after,

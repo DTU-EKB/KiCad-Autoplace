@@ -41,9 +41,14 @@ def route_check(in_pcb, jar=DEFAULT_JAR, passes=10):
         capture_output=True, text=True, timeout=1800)
     dt = time.time() - t0
 
-    if not os.path.exists(ses):
-        print("FreeRouting produced no SES. Tail of output:")
-        print((proc.stdout or "")[-800:])
+    # A 0-byte SES counts as failure too: at high pass counts FreeRouting can
+    # bail after auto-routing and write an empty file. Importing it would
+    # silently report 0 routed -- so treat empty-or-missing as an error and
+    # surface FreeRouting's own output (which the harness otherwise swallows).
+    if not os.path.exists(ses) or os.path.getsize(ses) == 0:
+        print("FreeRouting produced no usable SES "
+              f"(exit {proc.returncode}). Tail of output:")
+        print((proc.stdout or "")[-1200:])
         print((proc.stderr or "")[-400:])
         raise SystemExit(1)
 
