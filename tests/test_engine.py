@@ -193,3 +193,34 @@ def test_place_pins_explicit_connectors_to_edges():
     )
     assert on_edge
     assert metrics.overlaps(b) == []
+
+
+def test_congestion_amplifies_channel_penalty():
+    from autoplace import anneal
+    b = Board(0, 0, 60, 60)
+    b.components = {
+        "A": Component("A", 4, 4, x=20, y=20),
+        "B": Component("B", 4, 4, x=26.2, y=20),   # close: gx=2.2mm, gy=-4 -> channel term active
+    }
+
+    class HotField:
+        empty = False
+        def pressure_at(self, x, y):
+            return 2.0
+
+    base = anneal.Annealer(b, margin=0.8, seed=0, channel_scale=1.0)
+    hot = anneal.Annealer(b, margin=0.8, seed=0, channel_scale=1.0,
+                          congestion=HotField())
+    a, bb = b.components["A"], b.components["B"]
+    assert hot._pair_penalty(a, bb, 0.8) > base._pair_penalty(a, bb, 0.8)
+
+
+def test_congestion_none_is_unchanged():
+    from autoplace import anneal
+    b1, b2 = _board(), _board()
+    anneal.anneal(b1, seed=7, steps=2000, margin=0.8, channel_scale=0.5)
+    anneal.anneal(b2, seed=7, steps=2000, margin=0.8, channel_scale=0.5,
+                  congestion=None)
+    for ref in b1.components:
+        assert b1.components[ref].x == b2.components[ref].x
+        assert b1.components[ref].y == b2.components[ref].y

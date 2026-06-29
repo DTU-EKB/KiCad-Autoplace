@@ -34,6 +34,7 @@ class _Weights:
     EDGE = 0.6            # connector distance to nearest edge
     COHESION = 0.35       # component distance to its block centroid
     CHANNEL = 4.0         # soft penalty for gaps narrower than a routing channel
+    CONG_K = 3.0          # per-unit-pressure multiplier on the channel term
 
 
 # Desired clear gap between courtyards so the router has a channel (mm).
@@ -42,12 +43,19 @@ CHANNEL_MM = 2.6          # 1.0 mm track + 2 x 0.8 mm clearance (DTU fiber-laser
 
 class Annealer:
     def __init__(self, board: Board, *, margin: float = 0.8, seed: int = 0,
-                 channel_scale: float = 1.0, cohesion_scale: float = 1.0):
+                 channel_scale: float = 1.0, cohesion_scale: float = 1.0,
+                 congestion=None):
         import random
         self.board = board
         self.margin = margin
         self.channel = _Weights.CHANNEL * channel_scale
         self.cohesion = _Weights.COHESION * cohesion_scale
+        # per-component channel multiplier from the previous routing's congestion
+        # (sampled once at the component's start position; fixed for this pass)
+        self.cpress = {}
+        if congestion is not None and not getattr(congestion, "empty", False):
+            self.cpress = {c.ref: congestion.pressure_at(c.x, c.y)
+                           for c in board.components.values()}
         self.rng = random.Random(seed)
         self.comps = list(board.components.values())
         self.free = [c for c in self.comps if not c.locked]
@@ -89,7 +97,9 @@ class Annealer:
         gap = max(gx, gy)
         shadow = min(gx, gy) < margin
         if self.channel and shadow and 0 <= gap < CHANNEL_MM:
-            cost += self.channel * (CHANNEL_MM - gap)
+            press = self.cpress.get(a.ref, 0.0) + self.cpress.get(b.ref, 0.0)
+            local = self.channel * (1.0 + _Weights.CONG_K * press / 2.0)
+            cost += local * (CHANNEL_MM - gap)
         return cost
 
     def _edge_dist(self, c) -> float:
@@ -269,7 +279,9 @@ class Annealer:
 
 
 def anneal(board: Board, *, seed: int = 0, steps: int = 6000, margin: float = 0.8,
-           channel_scale: float = 1.0, cohesion_scale: float = 1.0, progress=None):
+           channel_scale: float = 1.0, cohesion_scale: float = 1.0,
+           congestion=None, progress=None):
     Annealer(board, margin=margin, seed=seed, channel_scale=channel_scale,
-             cohesion_scale=cohesion_scale).run(steps=steps, progress=progress)
+             cohesion_scale=cohesion_scale, congestion=congestion).run(
+                 steps=steps, progress=progress)
     return board
