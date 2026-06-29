@@ -50,6 +50,7 @@
             <input id="seed" type="number" value="0" min="0" step="1" />
           </div>
           <button id="run" class="btn btn-primary" disabled>Run AutoPlacement</button>
+          <button id="refine" class="btn btn-ghost" disabled>Refine (route-driven)</button>
         </div>
 
         <div id="progressWrap" class="progress-wrap" hidden>
@@ -58,6 +59,9 @@
             <span id="progressPct">0%</span>
           </div>
           <div class="bar"><div id="bar" class="bar-fill"></div></div>
+          <div id="refineReadout" class="refine-readout" hidden>
+            routed: <span id="refinePct">–</span>% (best <span id="refineBest">–</span>%)
+          </div>
         </div>
       </section>
 

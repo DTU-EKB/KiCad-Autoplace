@@ -364,3 +364,4 @@ input:focus {
 .board-canvas .fp.conn rect { stroke: #ffd166; stroke-width: 1.2; }
 .board-canvas .fp text { font: 2px sans-serif; fill: #cfd3dc; pointer-events: none; }
 .board-foot { display: flex; justify-content: space-between; margin-top: 8px; }
+.refine-readout { margin-top: 6px; font-size: 13px; color: var(--text-secondary, #9aa); }
