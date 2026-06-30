@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld("api", {
   runRefine: (opts) => ipcRenderer.invoke("run-refine", opts),
   cancelRun: () => ipcRenderer.invoke("cancel-run"),
   finalize: (opts) => ipcRenderer.invoke("finalize", opts),
+  preflight: (opts) => ipcRenderer.invoke("preflight", opts),
   checkRefineTools: () => ipcRenderer.invoke("check-refine-tools"),
   revealPath: (p) => ipcRenderer.invoke("reveal-path", p),
   devConfig: () => ipcRenderer.invoke("dev-config"),

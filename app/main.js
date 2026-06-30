@@ -518,6 +518,14 @@ function registerIpc(win) {
 
   ipcMain.handle("finalize", (_e, opts) => runFinalize(win, opts));
 
+  ipcMain.handle("preflight", async (_e, { python, board }) => {
+    const res = await runCliJson(python, ["preflight", board]);
+    if (!res.ok) return { ok: false, error: res.error };
+    const pf = res.objs.find((o) => o.type === "preflight");
+    return pf ? { ok: true, rows: pf.rows, info: pf.info }
+              : { ok: false, error: "no preflight result" };
+  });
+
   ipcMain.handle("cancel-run", () => {
     if (activeProc) {
       activeProc._cancelled = true;

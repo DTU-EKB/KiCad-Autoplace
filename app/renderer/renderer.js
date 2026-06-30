@@ -99,6 +99,33 @@ async function loadBoardView() {
   $("boardView").hidden = false;
   $("boardMode").textContent = "before placement";
   renderBoard(state.geometry);
+  loadPreflight();
+}
+
+// Inspect the board and show the green/amber pre-run checklist.
+async function loadPreflight() {
+  if (!state.python || !state.board) return;
+  const res = await window.api.preflight({
+    python: state.python,
+    board: state.board,
+  });
+  const panel = $("preflight");
+  const list = $("preflightRows");
+  if (!res.ok) {
+    panel.hidden = true;
+    return;
+  }
+  list.innerHTML = res.rows
+    .map(
+      (r) =>
+        `<li class="pf-row pf-${r.status}">` +
+        `<span class="pf-icon">${r.status === "ok" ? "✓" : "⚠"}</span>` +
+        `<span class="pf-label">${r.label}</span>` +
+        `<span class="pf-detail">${r.detail}</span>` +
+        `</li>`
+    )
+    .join("");
+  panel.hidden = false;
 }
 
 const state = {
