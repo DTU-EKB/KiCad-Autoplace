@@ -262,24 +262,24 @@ def test_no_overlaps_after_align():
 # ---------- G1.8 — returns count ----------
 
 def test_align_returns_count_of_moved_parts():
-    """align() returns exactly the number of parts whose position changed."""
+    """align() returns exactly the number of parts whose (x, y) position changed."""
     b = Board(0, 0, 100, 100)
-    # Two parts in a cluster, third is a singleton.
+    # Two parts in a cluster on X, third is a singleton on both axes.
     b.components = {
         "R1": _part("R1", 10.0, 10.0),
         "R2": _part("R2", 10.4, 30.0),
-        "R3": _part("R3", 25.0, 50.0),   # singleton on both axes
+        "R3": _part("R3", 25.0, 50.0),   # singleton on both axes -> never moved
     }
+    # Snapshot positions before running align.
+    before = {ref: (c.x, c.y) for ref, c in b.components.items()}
+
     moved = aesthetic.align(b, grid=0.5, margin=0.8)
-    # R1 and R2 may be moved (if the cluster target differs from their original X);
-    # R3 is a singleton on both axes -> not moved.
-    # Just check that count matches actual changes.
-    actual_changes = sum(
+
+    # Count parts whose (x, y) actually changed.
+    actual_moved = sum(
         1 for ref, c in b.components.items()
-        if ref == "R1" and c.x != 10.0 or
-           ref == "R2" and c.x != 10.4 or
-           ref == "R3" and c.x != 25.0
+        if (c.x, c.y) != before[ref]
     )
-    # The return value should be consistent (not necessarily equal in this test,
-    # because Y axis may also move some parts — count total moves across both axes).
-    assert moved >= 0
+    assert moved == actual_moved, (
+        f"align() returned {moved} but {actual_moved} part(s) actually moved"
+    )
