@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import math
 
+from . import geom
 from .blocks import block_centroids
 from .edge import pin_to_edge
 from .metrics import _is_power
@@ -161,10 +162,7 @@ class Annealer:
         return cost
 
     def _clamp(self, c):
-        b, m = self.board, self.margin
-        hw, hh = c.eff_w / 2, c.eff_h / 2
-        c.x = min(max(c.x, b.x0 + hw + m), b.x1 - hw - m)
-        c.y = min(max(c.y, b.y0 + hh + m), b.y1 - hh - m)
+        geom.clamp_center(c, self.board, self.margin)
 
     # ---- main loop -------------------------------------------------------
     def run(self, *, steps: int = 6000, t0: float = 8.0, t_end: float = 0.05,

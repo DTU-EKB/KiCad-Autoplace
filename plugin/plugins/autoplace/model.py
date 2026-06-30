@@ -81,6 +81,7 @@ class Board:
     x1: float
     y1: float
     components: dict[str, Component] = field(default_factory=dict)
+    edge_keepout: float = 0.0      # extra inward inset from the outline (mm); 0 == legacy
 
     @property
     def width(self) -> float:

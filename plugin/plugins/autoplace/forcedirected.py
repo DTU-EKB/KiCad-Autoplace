@@ -12,13 +12,12 @@ from __future__ import annotations
 
 import math
 
+from . import geom
 from .model import Board, Component
 
 
 def _clamp_to_board(c: Component, board: Board, margin: float):
-    half_w, half_h = c.eff_w / 2, c.eff_h / 2
-    c.x = min(max(c.x, board.x0 + half_w + margin), board.x1 - half_w - margin)
-    c.y = min(max(c.y, board.y0 + half_h + margin), board.y1 - half_h - margin)
+    geom.clamp_center(c, board, margin)
 
 
 def seed_positions(board: Board, rng, margin: float = 1.0):
