@@ -36,6 +36,11 @@ def margin_for(fab: str) -> float:
     return _profile(fab)["clearance"]
 
 
+def track_for(fab: str) -> float:
+    """Track width (mm) for a fabrication profile."""
+    return _profile(fab)["track"]
+
+
 def apply_to_project(pro_path: str, fab: str) -> bool:
     """Write a fabrication's clearance/track into a ``.kicad_pro`` JSON.
 
