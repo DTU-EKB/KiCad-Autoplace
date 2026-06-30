@@ -66,6 +66,7 @@ def cmd_place(args):
 
     from autoplace import fabrication
     strategy = os.environ.get("STRATEGY", "auto")
+    aesthetic = os.environ.get("AESTHETIC", "1") != "0"
     fab = _fab()
     if stream:
         emit({"type": "progress", "stage": "load", "percent": 0.0})
@@ -73,7 +74,8 @@ def cmd_place(args):
     connectors = _read_connectors(in_path)
     report = engine.place(model, seed=seed, strategy=strategy,
                           connectors=connectors, margin=fabrication.margin_for(fab),
-                          track=fabrication.track_for(fab), progress=progress)
+                          track=fabrication.track_for(fab), progress=progress,
+                          aesthetic=aesthetic)
     kicad_io.apply_placement(model, pcb, out_path)
     # carry the project file so net-class (track/clearance) rules survive: the
     # router reads widths from <stem>.kicad_pro, not the .kicad_pcb.
@@ -105,11 +107,12 @@ def _route_candidate(model, in_path, fab, seed, jar, passes, sides,
     import pcbnew
 
     from autoplace import engine, fabrication, kicad_io, routing
+    aesthetic = os.environ.get("AESTHETIC", "1") != "0"
     _, pcb = kicad_io.load_board(in_path)
     cand = copy.deepcopy(model)
     engine.place(cand, seed=seed, strategy=strategy, connectors=connectors,
                  margin=fabrication.margin_for(fab),
-                 track=fabrication.track_for(fab))
+                 track=fabrication.track_for(fab), aesthetic=aesthetic)
     work = os.path.join(os.getcwd(), f"_placemulti_cand{seed}.kicad_pcb")
     kicad_io.apply_to_board(cand, pcb)
     pcbnew.SaveBoard(work, pcb)
@@ -135,6 +138,7 @@ def cmd_place_multi(args):
         sys.stdout.flush()
 
     strategy = os.environ.get("STRATEGY", "auto")
+    aesthetic = os.environ.get("AESTHETIC", "1") != "0"
     fab = _fab()
     emit({"type": "progress", "stage": "load", "percent": 0.0})
     model, _ = kicad_io.load_board(in_path)
@@ -144,7 +148,8 @@ def cmd_place_multi(args):
             "whitespace_connectivity", "decap_proximity", "hpwl_mm")
     for i, cand in enumerate(multiseed.run_candidates(
             model, count, strategy=strategy, connectors=connectors,
-            margin=fabrication.margin_for(fab), track=fabrication.track_for(fab))):
+            margin=fabrication.margin_for(fab), track=fabrication.track_for(fab),
+            aesthetic=aesthetic)):
         cand["index"] = i
         cand["count"] = count
         emit({"type": "progress", "stage": "place",
