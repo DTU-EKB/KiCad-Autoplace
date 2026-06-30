@@ -287,6 +287,61 @@ def tall_clearance(board: Board, margin: float = 0.8, track: float = 1.0) -> flo
     return round(total / n, 3) if n else 0.0
 
 
+def alignment_score(board: Board, tol: float | None = None) -> float:
+    """Mean residual (mm) of clusterable free parts from their block's shared axis.
+
+    Lower is better; 0.0 when no block has >=2 parts within tol on an axis.
+    Same grouping/clustering as aesthetic.align, so metric and term stay in lockstep.
+    """
+    from .aesthetic import ALIGN_TOL_MM
+    if tol is None:
+        tol = ALIGN_TOL_MM
+
+    candidates = [
+        c for c in board.free()
+        if not c.edge and not c.locked
+    ]
+
+    # Group by block.
+    groups: dict[str, list] = {}
+    for c in candidates:
+        groups.setdefault(c.block, []).append(c)
+
+    residuals: list[float] = []
+
+    for axis in ("x", "y"):
+        for _key, group in sorted(groups.items()):
+            parts = sorted(group, key=lambda c: (getattr(c, axis), c.ref))
+            if not parts:
+                continue
+            # Greedy clustering (identical to aesthetic.align).
+            clusters: list[list] = []
+            current = [parts[0]]
+            running_mean = getattr(parts[0], axis)
+            for c in parts[1:]:
+                coord = getattr(c, axis)
+                if abs(coord - running_mean) <= tol:
+                    current.append(c)
+                    running_mean = sum(getattr(p, axis) for p in current) / len(current)
+                else:
+                    clusters.append(current)
+                    current = [c]
+                    running_mean = coord
+            clusters.append(current)
+
+            for cluster in clusters:
+                if len(cluster) < 2:
+                    continue
+                coords = [getattr(c, axis) for c in cluster]
+                mean = sum(coords) / len(coords)
+                for coord in coords:
+                    residuals.append(abs(coord - mean))
+
+    if not residuals:
+        return 0.0
+    return round(sum(residuals) / len(residuals), 4)
+
+
 def decap_proximity(board: Board) -> float:
     """Mean decoupling-cap -> IC-power-pin distance (mm) over detected pairs.
 
