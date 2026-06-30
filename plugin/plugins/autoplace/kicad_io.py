@@ -15,7 +15,7 @@ import shutil
 
 import pcbnew
 
-from . import nets
+from . import footprints, nets
 from .model import Board, Component, Pad
 
 _CONNECTOR_HINTS = ("Connector", "TerminalBlock", "PinHeader", "Screw")
@@ -66,6 +66,7 @@ def build_model(pcb: "pcbnew.BOARD") -> Board:
             sheet=_safe(fp.GetSheetname),
             value=_safe(fp.GetValue),
             fpid=fpid,
+            height=footprints.height_mm(fpid),
         )
         for pad in fp.Pads():
             pp = pad.GetPosition()
