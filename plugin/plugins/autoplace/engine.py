@@ -17,7 +17,7 @@ from .model import Board
 
 
 def place(board: Board, *, seed: int = 0, grid: float = 0.5, margin: float = 0.8,
-          iters: int = 400, sa_steps: int | None = None,
+          track: float = 1.0, iters: int = 400, sa_steps: int | None = None,
           strategy: str = "auto", progress=None,
           connectors: list[str] | None = None) -> dict:
     """strategy: 'auto' (force-directed seed, floorplan only via cohesion),
@@ -83,6 +83,7 @@ def place(board: Board, *, seed: int = 0, grid: float = 0.5, margin: float = 0.8
         anneal.anneal(board, seed=seed, steps=sa_steps, margin=margin,
                       channel_scale=channel_scale,
                       cohesion_scale=2.5 if use_floorplan else 1.0,
+                      track=track,
                       progress=lambda f: _report("anneal", 0.15 + 0.77 * f))
     remaining = legal_mod.legalize(board, grid=grid, margin=margin)
     _report("legalize", 0.96)

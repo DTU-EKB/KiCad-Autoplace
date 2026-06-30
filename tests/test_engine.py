@@ -224,3 +224,31 @@ def test_congestion_none_is_unchanged():
     for ref in b1.components:
         assert b1.components[ref].x == b2.components[ref].x
         assert b1.components[ref].y == b2.components[ref].y
+
+
+def test_cross_block_gutter_widens_channel():
+    from autoplace import anneal
+    b = Board(0, 0, 80, 80)
+    a = Component("A", 4, 4, x=20, y=20, block="X")
+    bb = Component("B", 4, 4, x=27.5, y=20, block="Y")   # gx = 7.5 - 4 = 3.5
+    b.components = {"A": a, "B": bb}
+    ann = anneal.Annealer(b, margin=0.8, seed=0, channel_scale=1.0)
+    # gap 3.5 is beyond the single-track channel (2.6) but inside the cross-block
+    # target (2.6 + gutter 1.8 = 4.4) -> cross-block pairs are penalised.
+    cross = ann._pair_penalty(a, bb, 0.8)
+    a.block = bb.block = "X"                              # same block now
+    same = ann._pair_penalty(a, bb, 0.8)
+    assert cross > 0
+    assert same == 0
+    assert cross > same
+
+
+def test_dense_board_zeroes_the_gutter():
+    from autoplace import anneal
+    b = Board(0, 0, 80, 80)
+    a = Component("A", 4, 4, x=20, y=20, block="X")
+    bb = Component("B", 4, 4, x=27.5, y=20, block="Y")
+    b.components = {"A": a, "B": bb}
+    # channel_scale 0 (dense board): the channel term is off entirely -> no gutter
+    ann = anneal.Annealer(b, margin=0.8, seed=0, channel_scale=0.0)
+    assert ann._pair_penalty(a, bb, 0.8) == 0
