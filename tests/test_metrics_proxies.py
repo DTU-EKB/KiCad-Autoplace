@@ -29,20 +29,29 @@ def test_sheet_spread_single_sheet_is_zero_sentinel():
 
 
 def test_sheet_spread_excludes_locked_and_edge():
-    # Two sheets, each with two movable parts spread sanely + a far locked part
-    # that would wreck the bbox if counted.
-    b = Board(0, 0, 100, 100)
+    # Geometry: two 4x4 parts per sheet at centres (a, a) and (a+4, a+4).
+    #   bbox  = 8 x 8 = 64,  used = 16+16 = 32,  fill = 0.5  -> in [0.35, 0.6]
+    #   -> penalty = 0  -> mean score = 0.0  (the discriminating value).
+    #
+    # Locked / edge parts are placed far from both clusters.  If the code
+    # regressed to include them, the bbox of their sheet would explode, fill
+    # would fall well below SPREAD_LO=0.35, and the score would become > 0.
+    # Asserting == 0.0 therefore catches that regression; isinstance/>=0 would not.
+    b = Board(0, 0, 200, 200)
     b.components = {
-        "A1": _part("A1", 20, 20, sheet="/A/"),
-        "A2": _part("A2", 30, 30, sheet="/A/"),
-        "A3": _part("A3", 95, 95, sheet="/A/", locked=True),
+        # Sheet /A/ movable pair: centres (10,10) and (14,14) -> fill 0.5
+        "A1": _part("A1", 10, 10, sheet="/A/"),
+        "A2": _part("A2", 14, 14, sheet="/A/"),
+        # Locked part far from /A/ cluster; if counted, bbox grows ~10x -> fill << 0.35
+        "A3": _part("A3", 190, 190, sheet="/A/", locked=True),
+        # Sheet /B/ movable pair: centres (60,60) and (64,64) -> fill 0.5
         "B1": _part("B1", 60, 60, sheet="/B/"),
-        "B2": _part("B2", 70, 70, sheet="/B/"),
+        "B2": _part("B2", 64, 64, sheet="/B/"),
+        # Edge part far from /B/ cluster; same regression check
         "B3": _part("B3", 5, 5, sheet="/B/", edge="L"),
     }
-    score = metrics.sheet_spread_score(b)
-    assert isinstance(score, float)
-    assert score >= 0.0          # deterministic, defined; locked/edge ignored
+    # With correct code (locked/edge excluded): both sheets score 0 -> mean 0.0
+    assert metrics.sheet_spread_score(b) == 0.0
 
 
 def test_pinch_fraction_close_pair_is_pinched():
