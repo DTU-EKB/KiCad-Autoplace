@@ -77,6 +77,29 @@ def _span(c: Component) -> float:
     return c.eff_h if c.edge in ("L", "R") else c.eff_w
 
 
+def _orient_toward(c: Component, edge: str, tx: float, ty: float) -> int:
+    """Of the two valid rotations for ``edge``, return the one whose pad centroid
+    (at c's current position) is nearest the target (tx, ty). Deterministic (rot
+    tiebreak). L/R connectors use {90, 270}; T/B use {0, 180} — both keep the
+    same eff dims as the fixed baseline, so pinned position is unaffected."""
+    cands = (90, 270) if edge in ("L", "R") else (0, 180)
+    best = None  # (dist_sq, rot)
+    old = c.rot
+    for r in cands:
+        c.rot = r
+        pts = [c.pad_world(p) for p in c.pads]
+        if pts:
+            px = sum(p[0] for p in pts) / len(pts)
+            py = sum(p[1] for p in pts) / len(pts)
+        else:
+            px, py = c.x, c.y
+        d = (px - tx) ** 2 + (py - ty) ** 2
+        if best is None or d < best[0] or (d == best[0] and r < best[1]):
+            best = (d, r)
+    c.rot = old
+    return best[1]
+
+
 def assign_edges(board: Board, connectors, margin: float = 0.8) -> None:
     """Pin each given connector to the edge nearest its net partners."""
     conns = [board.components[r] for r in connectors
@@ -88,6 +111,7 @@ def assign_edges(board: Board, connectors, margin: float = 0.8) -> None:
         c.rot = 90 if c.edge in ("L", "R") else 0
         _set_along(c, cy if c.edge in ("L", "R") else cx)
         pin_to_edge(c, board, margin)
+        c.rot = _orient_toward(c, c.edge, cx, cy)
         _clamp_along(c, board, margin)
     # de-collide connectors sharing an edge: keep their net-affinity order,
     # enforce a margin gap, and respect the edge's usable span. Forward pass

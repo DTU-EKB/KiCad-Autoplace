@@ -70,3 +70,17 @@ def test_locked_connector_is_left_alone():
     b.components["J1"].locked = True
     edge.assign_edges(b, ["J1"], margin=0.8)
     assert b.components["J1"].edge == ""          # untouched
+
+
+def test_orient_toward_picks_rotation_facing_target():
+    # Pads offset +x in local coords (centroid offset (1.5, 0) from body centre).
+    # At rot=90:  pad_world rotates (ox, oy) -> (oy, -ox) => (−0.5, −1.5) & (+0.5, −1.5)
+    #             pad centroid relative to body = (0, -1.5) => faces -y (upward in KiCad coords)
+    # At rot=270: (ox, oy) -> (−oy, ox) => (+0.5, +1.5) & (−0.5, +1.5)
+    #             pad centroid relative to body = (0, +1.5) => faces +y (downward)
+    c = Component("J1", 4, 8, x=10, y=30,
+                  pads=[Pad("1", "A", 1.5, -0.5), Pad("2", "B", 1.5, 0.5)])
+    rot_before = c.rot
+    assert edge._orient_toward(c, "L", 10, 50) == 270   # target below (+y) -> rot270 faces it
+    assert edge._orient_toward(c, "L", 10, 10) == 90    # target above (-y) -> rot90 faces it
+    assert c.rot == rot_before                            # _orient_toward must not permanently mutate c.rot
