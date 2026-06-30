@@ -9,9 +9,16 @@ const path = require("path");
 const fs = require("fs");
 const os = require("os");
 
-// cli.py lives at the repo root; this app sits in <repo>/app.
-const REPO_ROOT = path.resolve(__dirname, "..");
-const CLI_PY = path.join(REPO_ROOT, "cli.py");
+// The Python engine (cli.py + plugin/) lives at the repo root in dev; when
+// packaged, electron-builder copies it to resources/engine (see package.json
+// build.extraResources). Spawn cwd must be writable -- under a packaged install
+// the resources dir may be read-only (Program Files) -- so route runs through
+// userData, not the engine dir.
+const ENGINE_DIR = app.isPackaged
+  ? path.join(process.resourcesPath, "engine")
+  : path.resolve(__dirname, "..");
+const CLI_PY = path.join(ENGINE_DIR, "cli.py");
+const RUN_CWD = app.isPackaged ? app.getPath("userData") : ENGINE_DIR;
 
 // The currently-running place/refine child, so Cancel can stop it (and the
 // FreeRouting Java it spawned). Only one run happens at a time.
@@ -165,7 +172,7 @@ function runPlace(win, { board, python, strategy, seed, fab }) {
     let proc;
     try {
       proc = spawn(python, args, {
-        cwd: REPO_ROOT, env, detached: process.platform !== "win32",
+        cwd: RUN_CWD, env, detached: process.platform !== "win32",
       });
     } catch (e) {
       return resolve({ ok: false, error: String(e) });
@@ -248,7 +255,7 @@ function runPlaceMulti(win, { board, python, strategy, count, fab }) {
     let proc;
     try {
       proc = spawn(python, args, {
-        cwd: REPO_ROOT, env, detached: process.platform !== "win32",
+        cwd: RUN_CWD, env, detached: process.platform !== "win32",
       });
     } catch (e) {
       return resolve({ ok: false, error: String(e) });
@@ -324,7 +331,7 @@ function runRefine(win, { board, python, seed, budget, passes, fab, sides }) {
     let proc;
     try {
       proc = spawn(python, args, {
-        cwd: REPO_ROOT, env, detached: process.platform !== "win32",
+        cwd: RUN_CWD, env, detached: process.platform !== "win32",
       });
     } catch (e) {
       return resolve({ ok: false, error: String(e) });
@@ -383,7 +390,7 @@ function dumpBoard(python, board) {
     }
     let proc;
     try {
-      proc = spawn(python, [CLI_PY, "dump", board], { cwd: REPO_ROOT });
+      proc = spawn(python, [CLI_PY, "dump", board], { cwd: RUN_CWD });
     } catch (e) {
       return resolve({ ok: false, error: String(e) });
     }
@@ -413,7 +420,7 @@ function runCliJson(python, args) {
     }
     let proc;
     try {
-      proc = spawn(python, [CLI_PY, ...args], { cwd: REPO_ROOT });
+      proc = spawn(python, [CLI_PY, ...args], { cwd: RUN_CWD });
     } catch (e) {
       return resolve({ ok: false, error: String(e) });
     }

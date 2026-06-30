@@ -1,15 +1,45 @@
 {
   "name": "dtu-ekb-autoplace-app",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Desktop front-end for the DTU-EKB KiCad auto-placement engine.",
   "main": "main.js",
   "author": "DTU and EKB Contributors",
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "dev": "electron . --dev"
+    "dev": "electron . --dev",
+    "dist": "electron-builder --win"
   },
   "devDependencies": {
-    "electron": "^33.2.0"
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "dk.dtu.ekb.autoplace",
+    "productName": "DTU-EKB AutoPlace",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*"
+    ],
+    "extraResources": [
+      { "from": "../cli.py", "to": "engine/cli.py" },
+      { "from": "../plugin", "to": "engine/plugin" }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "DTU-EKB AutoPlace"
+    }
   }
 }
