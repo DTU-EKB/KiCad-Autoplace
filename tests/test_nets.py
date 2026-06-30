@@ -76,6 +76,12 @@ def test_classify_nc():
     assert nets.classify_net(b, "DEAD") == "NC"
 
 
+def test_classify_vss_is_power_not_ground():
+    # VSS is a rail (documented as POWER), not a ground reference.
+    b = _board({"VSS": ["passive", "passive"]})
+    assert nets.classify_net(b, "VSS") == "POWER"
+
+
 def test_classify_empty_pintype_falls_back_to_name():
     # unsynced board: no pin types -> classify by name only
     b = _board({"GND": [""], "+5V": [""], "ADC_X": [""], "SOMESIG": [""]})
