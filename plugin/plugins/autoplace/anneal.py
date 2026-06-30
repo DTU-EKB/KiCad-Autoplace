@@ -25,7 +25,7 @@ import math
 from . import electrical, geom
 from .blocks import block_centroids
 from .edge import pin_to_edge
-from .metrics import _is_power, channel_width
+from .metrics import _is_power, channel_width, TALL_HALO_MM, TALL_MM
 from .model import Board
 
 
@@ -115,6 +115,8 @@ class Annealer:
         target = self.channel_mm
         if a.block and b.block and a.block != b.block:
             target += self.gutter * self.channel_scale
+        if max(a.height, b.height) >= TALL_MM:           # tall part needs rework clearance
+            target += TALL_HALO_MM * self.channel_scale
         if self.channel and shadow and 0 <= gap < target:
             press = self.cpress.get(a.ref, 0.0) + self.cpress.get(b.ref, 0.0)
             local = self.channel * (1.0 + _Weights.CONG_K * press / 2.0)
