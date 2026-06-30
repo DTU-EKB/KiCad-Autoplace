@@ -19,62 +19,67 @@ leaving nets that can't route on one layer as ratsnest to hand-jumper.
 - Independent of the fabrication profile (mixable); affects the routing step only
   (placement unchanged).
 
-## Mechanism
+## Mechanism (as built)
+
+The original plan rewrote the DSN to mark non-bottom layers non-routable. That
+was abandoned after verification: **FreeRouting ignores the Specctra layer
+`type`** (a `power` F.Cu still got ~500 tracks). The reliable lever is KiCad's
+copper-layer count, with two prerequisites learned from real routes.
 
 In `route_once`, gated by a new `sides` parameter (default `2`):
 
 - `sides == 2`: unchanged.
-- `sides == 1`: after `ExportSpecctraDSN`, rewrite the DSN so the only routable
-  copper `signal` layer is B.Cu — every other `.Cu` layer's `(type signal)`
-  becomes `(type power)` (non-routable in FreeRouting). FreeRouting then routes
-  what it can on B.Cu and leaves the rest unrouted.
-  - Verification during implementation: a real route must yield tracks on B.Cu
-    only. If `power` proves unsuitable, the fallback is the same transform
-    removing the non-B.Cu layers from the routable set — identical user-facing
-    result. (The pure transform is swappable without touching callers.)
+- `sides == 1` (single-sided, clean slate, on **F.Cu**):
+  1. **Strip existing routing** from `pcb_path` textually (drop every top-level
+     `(segment …)` / `(via …)` / `(arc …)`). Done on the *file* before
+     `LoadBoard` because in-process `pcbnew` track removal access-violates. This
+     also prevents leftover B.Cu wires from referencing a layer we are about to
+     remove (which makes FreeRouting reject the DSN).
+  2. `board.SetCopperLayerCount(1)` → one copper layer (KiCad keeps **F.Cu**).
+  3. **Move any B.Cu pour onto F.Cu** (`zone.SetLayer(F.Cu)`) — an exported zone
+     referencing the now-absent B.Cu breaks the DSN
+     (`layer name 'B.Cu' not found`). `SetLayer` avoids `pcb.Remove`, which
+     corrupts the KiCad-10 connectivity object.
+  4. Export + route as usual; uncrossable nets are left unrouted.
+
+The single copper layer is the front (F.Cu); the etched side is chosen at
+export/mirror. Verified end-to-end on the system board: 0 warnings, tracks on
+F.Cu only, B.Cu pour relocated.
 
 ## GND-zone interaction
 
-`force_gnd_zones` becomes sides-aware (`force_gnd_zones(pcb, sides=2)`):
-
-- `sides == 2`: today's behaviour — force + fill B.Cu and F.Cu GND pours.
-- `sides == 1`: **remove** F.Cu copper zones (single-sided has no top copper),
-  force the B.Cu zone to GND, and fill. So the single-sided output has a bottom
-  GND plane and no top copper.
-
-`apply_placement` keeps calling `force_gnd_zones(pcb)` with the default
-`sides=2` — the single-sided decision is a routing-time choice applied in
-`route_once`/`refine`, not at placement.
+`force_gnd_zones(pcb)` is unchanged from the GND-enforcement work, with one
+addition: it **skips zones on a disabled copper layer** (so it does not try to
+fill a B.Cu zone after `SetCopperLayerCount(1)`). The single-sided layer
+reduction and the B.Cu→F.Cu zone move live in `route_once`, not in
+`force_gnd_zones`. `apply_placement` is unchanged (placement-time, double-sided).
 
 ## Architecture
 
-### New pure module `autoplace/dsn.py` (no pcbnew)
+### New pure module `autoplace/strip.py` (no pcbnew, no sexpdata)
 
 ```python
-def single_sided_dsn(text: str, keep: str = "B.Cu") -> str:
-    """Make every copper signal layer except `keep` non-routable.
+def strip_tracks(text: str, kinds=("segment", "via", "arc")) -> tuple[str, int]:
+    """Remove top-level routing s-expressions from a .kicad_pcb text.
 
-    Turns `(layer <name> (type signal))` into `(type power)` for every layer
-    whose name ends in '.Cu' and != keep. Leaves `keep` and all non-copper
-    layers untouched. Pure string transform -> unit-testable.
+    Balanced-paren, quote-aware. Footprints / pads / zones / nets survive.
+    Returns (stripped_text, removed_count). Pure -> unit-testable.
     """
 ```
 
 ### `routing.route_once(pcb_path, jar, passes, stem=None, sides=2)`
 
-- after `LoadBoard`: `force_gnd_zones(board, sides=sides)`.
-- after `ExportSpecctraDSN`, if `sides == 1`: read the DSN, apply
-  `dsn.single_sided_dsn`, write it back, before invoking FreeRouting.
-- after `ImportSpecctraSES`: `force_gnd_zones(board, sides=sides)` (refill).
+- if `sides == 1`: read `pcb_path`, `strip_tracks`, write back (clean slate).
+- `LoadBoard`.
+- if `sides == 1`: `SetCopperLayerCount(1)` and move B.Cu zones to F.Cu.
+- `force_gnd_zones(board)` (set GND + fill enabled-layer pours).
+- export → FreeRouting → import → `force_gnd_zones(board)` → save.
 
-### `kicad_io.force_gnd_zones(pcb, sides=2)`
+### `kicad_io.force_gnd_zones(pcb)`
 
-- Collect zones via `[pcb.GetArea(i) for i in range(pcb.GetAreaCount())]`.
-- `sides == 1`: `pcb.Remove(z)` for zones on F.Cu (and not B.Cu); set remaining
-  B.Cu/F.Cu zones to the GND net.
-- `sides == 2`: set all B.Cu/F.Cu zones to GND (current).
-- Fill `pcb.Zones()` if anything changed. No-op when there is no GND net.
-- Returns `{"set": [...], "removed": [...]}`.
+- Set every B.Cu/F.Cu copper zone **on an enabled layer** to the GND net, fill.
+- No `sides` param; skips zones whose layer is disabled (e.g. B.Cu after the
+  single-sided layer reduction). Returns `{"set": [...]}`.
 
 ### `refine.refine(..., sides=2)`
 
@@ -98,9 +103,9 @@ def single_sided_dsn(text: str, keep: str = "B.Cu") -> str:
 
 ## Files
 
-- Create: `plugin/plugins/autoplace/dsn.py`, `tests/test_dsn.py`
+- Create: `plugin/plugins/autoplace/strip.py`, `tests/test_strip.py`
 - Modify: `plugin/plugins/autoplace/routing.py`,
-  `plugin/plugins/autoplace/kicad_io.py` (force_gnd_zones sides param),
+  `plugin/plugins/autoplace/kicad_io.py` (force_gnd_zones skips disabled layers),
   `plugin/plugins/autoplace/refine.py`, `cli.py`,
   `app/main.js`, `app/renderer/index.html`, `app/renderer/renderer.js`.
 
@@ -109,9 +114,10 @@ def single_sided_dsn(text: str, keep: str = "B.Cu") -> str:
 ```
 Routing = Single-sided  →  Refine  →  SIDES=1
   → cli refine → refine(sides=1) → route_once(sides=1)
-     → force_gnd_zones(sides=1): drop F.Cu zone, B.Cu pour = GND
-     → ExportSpecctraDSN → single_sided_dsn (F.Cu signal→power)
-     → FreeRouting routes B.Cu only; uncrossable nets left unrouted
+     → strip_tracks(pcb_path)              clean slate
+     → SetCopperLayerCount(1); B.Cu pour → F.Cu
+     → force_gnd_zones; ExportSpecctraDSN → FreeRouting (one layer, F.Cu)
+     → uncrossable nets left unrouted
 ```
 
 ## Error handling
@@ -123,22 +129,19 @@ Routing = Single-sided  →  Refine  →  SIDES=1
 
 ## Testing
 
-Pure-Python `tests/test_dsn.py` (system python):
-1. `single_sided_dsn` turns `(layer F.Cu (type signal))` into `(type power)` and
-   leaves `(layer B.Cu (type signal))` untouched.
-2. Inner copper layers (`In1.Cu` signal) are also made `power`; a non-copper
-   layer line is untouched.
-3. Idempotent: applying twice equals applying once.
-4. `keep` is configurable (e.g. `keep="F.Cu"` leaves F.Cu signal, makes B.Cu
-   power).
+Pure-Python `tests/test_strip.py` (system python):
+1. `strip_tracks` removes `(segment …)` / `(via …)` / `(arc …)` and keeps
+   footprints, pads, and zones; count is correct.
+2. The `(net N "…")` declaration survives (it is not a track).
+3. Parens inside quoted strings don't confuse the matcher.
+4. No tracks → no-op (text unchanged).
 
-End-to-end (KiCad python, manual, as with the GND fix): single-sided route yields
-tracks on B.Cu only and no F.Cu copper zone; double-sided unchanged.
+End-to-end (KiCad python, manual): single-sided route on the system board yields
+0 `B.Cu not found` warnings, tracks on F.Cu only, the B.Cu pour relocated to
+F.Cu, and a higher routed-% than the no-strip attempt; double-sided unchanged.
 
 ## Out of scope (YAGNI)
 
 - Two-stage (bottom-then-top) single-sided routing.
-- Choosing an arbitrary single layer via the UI (bottom only).
-- Reducing the output board's copper-layer count to 1 (F.Cu left empty is fine;
-  the user can set layer count in KiCad).
+- Choosing which physical side via the UI (single layer is F.Cu; mirror at export).
 - Applying `sides` to `place` output (routing-time decision only).

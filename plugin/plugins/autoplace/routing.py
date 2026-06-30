@@ -19,21 +19,48 @@ import time
 
 import pcbnew
 
+from . import strip as strip_mod
 from .kicad_io import force_gnd_zones, unrouted_count
 
 
-def route_once(pcb_path: str, jar: str, passes: int, stem: str = None) -> dict:
+def route_once(pcb_path: str, jar: str, passes: int, stem: str = None,
+               sides: int = 2) -> dict:
     """Load ``pcb_path`` fresh, route it once with FreeRouting, report completion.
 
     Writes ``stem.dsn`` / ``stem.ses`` / ``stem.routed.kicad_pcb`` (``stem``
     defaults to the input path without extension). Net-class widths come from the
     board's ``.kicad_pro`` -- ensure it sits next to ``pcb_path``.
+
+    ``sides == 1`` forces single-sided routing on a clean slate: any existing
+    routing in ``pcb_path`` is stripped (textually -- in-process pcbnew track
+    removal access-violates), then the board is reduced to one copper layer
+    (``SetCopperLayerCount(1)`` -> F.Cu) and re-routed from scratch, leaving
+    uncrossable nets unrouted. (FreeRouting ignores Specctra layer ``type``, so
+    cutting the layer count is the reliable lever.) The single copper layer is the
+    front; the etched side is chosen when the board is exported/mirrored.
     """
+    if sides == 1:
+        # Clean slate: drop any prior routing so we re-route on one layer (and so
+        # no leftover B.Cu wire references the layer we are about to remove).
+        with open(pcb_path, encoding="utf-8") as f:
+            stripped, _ = strip_mod.strip_tracks(f.read())
+        with open(pcb_path, "w", encoding="utf-8") as f:
+            f.write(stripped)
     board = pcbnew.LoadBoard(pcb_path)
     if board is None:
         raise RuntimeError(f"could not load {pcb_path}")
     if stem is None:
         stem = os.path.splitext(pcb_path)[0]
+    if sides == 1:
+        board.SetCopperLayerCount(1)            # one copper layer (F.Cu)
+        # Move any B.Cu pour onto F.Cu: with B.Cu gone from the layer structure,
+        # exporting a zone that still references it makes FreeRouting reject the
+        # DSN ("layer name 'B.Cu' not found"). SetLayer avoids pcb.Remove(), which
+        # corrupts connectivity on KiCad 10.
+        for i in range(board.GetAreaCount()):
+            z = board.GetArea(i)
+            if z.IsOnLayer(pcbnew.B_Cu):
+                z.SetLayer(pcbnew.F_Cu)
     # Ensure a filled GND plane BEFORE export: FreeRouting then sees GND pads
     # already connected by the pour and won't waste tracks routing ground.
     force_gnd_zones(board)

@@ -39,7 +39,7 @@ def keep_best_loop(initial, route_eval, step, *, budget, patience, margin,
 
 
 def refine(board, pcb, *, jar, work_pcb, passes=20, seed=0, budget=8, patience=3,
-           margin_conns=1, cell_mm=5.0, place_margin=0.8, progress=None):
+           margin_conns=1, cell_mm=5.0, place_margin=0.8, sides=2, progress=None):
     """pcbnew-wired loop. Mutates `board` to the best placement found.
 
     Each evaluation writes the candidate placement to ``work_pcb`` and routes
@@ -63,7 +63,7 @@ def refine(board, pcb, *, jar, work_pcb, passes=20, seed=0, budget=8, patience=3
     def route_eval(model):
         kicad_io.apply_to_board(model, pcb)
         pcbnew.SaveBoard(work_pcb, pcb)
-        r = routing.route_once(work_pcb, jar, passes)
+        r = routing.route_once(work_pcb, jar, passes, sides=sides)
         state["total"] = r["total"]
         field = cong_mod.parse(r["ses_path"], model, cell_mm=cell_mm)
         return r["pct"], field
