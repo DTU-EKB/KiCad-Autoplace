@@ -15,6 +15,7 @@ import shutil
 
 import pcbnew
 
+from . import nets
 from .model import Board, Component, Pad
 
 _CONNECTOR_HINTS = ("Connector", "TerminalBlock", "PinHeader", "Screw")
@@ -132,34 +133,47 @@ def apply_to_board(board: Board, pcb: "pcbnew.BOARD"):
             fp.Move(pcbnew.VECTOR2I(int(dx), int(dy)))
 
 
-GND_NET = "GND"
+def find_gnd_net(pcb: "pcbnew.BOARD"):
+    """The board's ground net, matched by leaf name so ``/GND`` counts.
+
+    KiCad prefixes a sheet path (``/GND``, ``/Power/GND``); match the last path
+    segment case-insensitively. Returns the NETINFO_ITEM or None.
+    """
+    for code in range(pcb.GetNetCount()):
+        net = pcb.FindNet(code)
+        if net is not None and nets.is_gnd_name(net.GetNetname()):
+            return net
+    return None
 
 
 def force_gnd_zones(pcb: "pcbnew.BOARD") -> dict:
-    """Tie every copper fill zone on B.Cu / F.Cu to the GND net, then refill.
+    """Fill copper pours so the router treats them as planes; ground net-less ones.
 
-    The pipeline inherits zone nets from the input board; a board that arrives
-    with no-net pours (e.g. the laser flow's net-less zones) would otherwise keep
-    them. CNC/etch boards want a real GND pour, so this normalises the copper
-    zones to GND and refills them (so the pour connects to GND pads). No-op when
-    the board has no GND net. Zones on a disabled copper layer (e.g. B.Cu after a
-    single-sided ``SetCopperLayerCount(1)``) are skipped.
+    An unfilled (or net-less) copper pour does not connect its net, so FreeRouting
+    routes that net as traces -- the reason ground gets routed. Filling each
+    B.Cu/F.Cu pour on its own net makes the router see the net as already
+    connected and skip it. Pours that already carry a net keep it (so deliberate
+    +24V / GND / HEATER_RET planes are NOT clobbered together); only net-less
+    pours -- the laser flow's zones -- are assigned to the ground net. Zones on a
+    disabled copper layer (e.g. B.Cu after single-sided ``SetCopperLayerCount(1)``)
+    are skipped.
     """
-    net = pcb.FindNet(GND_NET)
-    if net is None:
-        return {"set": [], "skipped": "no GND net"}
+    gnd = find_gnd_net(pcb)
     enabled = pcb.GetEnabledLayers()
-    changed = []
+    filled, grounded = [], []
     for i in range(pcb.GetAreaCount()):
         z = pcb.GetArea(i)
-        on = [name for name, lid in (("B.Cu", pcbnew.B_Cu), ("F.Cu", pcbnew.F_Cu))
-              if z.IsOnLayer(lid) and enabled.Contains(lid)]
-        if on:
-            z.SetNet(net)
-            changed.extend(on)
-    if changed:
+        layers = [name for name, lid in (("B.Cu", pcbnew.B_Cu), ("F.Cu", pcbnew.F_Cu))
+                  if z.IsOnLayer(lid) and enabled.Contains(lid)]
+        if not layers:
+            continue
+        if z.GetNetCode() == 0 and gnd is not None:
+            z.SetNet(gnd)
+            grounded.extend(layers)
+        filled.extend(layers)
+    if filled:
         pcbnew.ZONE_FILLER(pcb).Fill(pcb.Zones())
-    return {"set": changed}
+    return {"filled": filled, "grounded": grounded}
 
 
 def apply_placement(board: Board, pcb: "pcbnew.BOARD", out_path: str):
