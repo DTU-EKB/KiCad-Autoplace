@@ -1,5 +1,4 @@
 "use strict";
-// Renderer: wires the dashboard to the main-process bridge (window.api).
 
 const $ = (id) => document.getElementById(id);
 
@@ -8,20 +7,137 @@ const BLOCK_COLORS = [
   "#e34948", "#199e70", "#d95926", "#9085e9", "#888781",
 ];
 
-// Refine effort -> (loop budget, FreeRouting passes per route). Higher = slower
-// but more chances to close the routing gap.
 const EFFORT = {
   quick: { budget: 3, passes: 10 },
   normal: { budget: 5, passes: 20 },
   thorough: { budget: 10, passes: 30 },
 };
+
 function blockColor(block, blockList) {
   const i = blockList.indexOf(block);
   return BLOCK_COLORS[(i < 0 ? 0 : i) % BLOCK_COLORS.length];
 }
 
-// Build the inner SVG (outline + footprint rects) for a board geometry.
-// `labels` adds the refdes text (skipped for tiny gallery thumbnails).
+const state = {
+  python: null,
+  board: null,
+  running: false,
+  geometry: null,
+  connectors: new Set(),
+  lockedFootprints: new Set(),
+  refineToolsOk: false,
+  candidates: [],
+  committedSeed: null,
+  refineBoard: null,
+  lastFinished: null,
+  history: [], // [{ id, label, date, metric }]
+  historyCounter: 0
+};
+
+// ---- SVG / Dragging State ----
+let dragState = null; // { element, ref, startX, startY, origX, origY, scale }
+
+function getSvgCoords(svg, evt) {
+  const pt = svg.createSVGPoint();
+  pt.x = evt.clientX;
+  pt.y = evt.clientY;
+  return pt.matrixTransform(svg.getScreenCTM().inverse());
+}
+
+function handleDragStart(evt) {
+  if (evt.button !== 0) return; // Only left click for dragging
+  const g = evt.target.closest('.fp');
+  if (!g) return;
+  const ref = g.dataset.ref;
+  // If we just want to click, we will wait for mouseup to distinguish.
+  const svg = $("boardCanvas").querySelector('svg');
+  if (!svg) return;
+  const pt = getSvgCoords(svg, evt);
+  const fp = state.geometry.footprints.find(f => f.ref === ref);
+  if (!fp) return;
+
+  dragState = {
+    element: g,
+    ref: ref,
+    startX: pt.x,
+    startY: pt.y,
+    origX: fp.x,
+    origY: fp.y,
+    moved: false,
+    rect: g.querySelector('rect'),
+    text: g.querySelector('text')
+  };
+  g.style.cursor = 'grabbing';
+}
+
+function handleDragMove(evt) {
+  if (!dragState) return;
+  const svg = $("boardCanvas").querySelector('svg');
+  const pt = getSvgCoords(svg, evt);
+  const dx = pt.x - dragState.startX;
+  const dy = pt.y - dragState.startY;
+  
+  if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
+    dragState.moved = true;
+  }
+  
+  if (dragState.moved) {
+    const o = state.geometry.outline;
+    const fp = state.geometry.footprints.find(f => f.ref === dragState.ref);
+    if (!fp) return;
+    
+    // Update visual
+    let newX = dragState.origX + dx;
+    let newY = dragState.origY + dy;
+    
+    // Convert to SVG coords
+    const svgX = newX - fp.w / 2 - o.x0;
+    const svgY = newY - fp.h / 2 - o.y0;
+    
+    dragState.rect.setAttribute('x', svgX.toFixed(2));
+    dragState.rect.setAttribute('y', svgY.toFixed(2));
+    if (dragState.text) {
+      dragState.text.setAttribute('x', (svgX + 0.3).toFixed(2));
+      dragState.text.setAttribute('y', (svgY + 2).toFixed(2));
+    }
+  }
+}
+
+function handleDragEnd(evt) {
+  if (!dragState) return;
+  const svg = $("boardCanvas").querySelector('svg');
+  const pt = getSvgCoords(svg, evt);
+  
+  const dx = pt.x - dragState.startX;
+  const dy = pt.y - dragState.startY;
+  
+  if (!dragState.moved) {
+    // It was just a click -> toggle connector
+    toggleConnector(dragState.ref);
+  } else {
+    // Commit move
+    const fp = state.geometry.footprints.find(f => f.ref === dragState.ref);
+    if (fp) {
+      fp.x = dragState.origX + dx;
+      fp.y = dragState.origY + dy;
+      // We could lock it automatically when manually moved
+      if (!state.lockedFootprints.has(dragState.ref)) {
+        toggleLock(dragState.ref, false);
+      }
+    }
+  }
+  dragState.element.style.cursor = 'grab';
+  dragState = null;
+}
+
+function handleRightClick(evt) {
+  const g = evt.target.closest('.fp');
+  if (!g) return;
+  evt.preventDefault();
+  toggleLock(g.dataset.ref, true);
+}
+
+
 function boardSvgMarkup(geom, { labels = true } = {}) {
   const o = geom.outline;
   const W = o.x1 - o.x0;
@@ -32,12 +148,18 @@ function boardSvgMarkup(geom, { labels = true } = {}) {
       const x = f.x - f.w / 2 - o.x0;
       const y = f.y - f.h / 2 - o.y0;
       const conn = state.connectors.has(f.ref);
+      const locked = state.lockedFootprints.has(f.ref);
       const col = blockColor(f.block, blockList);
       const text = labels
         ? `<text x="${(x + 0.3).toFixed(2)}" y="${(y + 2).toFixed(2)}">${f.ref}</text>`
         : "";
+      
+      let classes = "fp";
+      if (conn) classes += " conn";
+      if (locked) classes += " locked";
+
       return (
-        `<g class="fp${conn ? " conn" : ""}" data-ref="${f.ref}">` +
+        `<g class="${classes}" data-ref="${f.ref}">` +
         `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${Math.max(f.w, 0.5).toFixed(2)}" ` +
         `height="${Math.max(f.h, 0.5).toFixed(2)}" fill="${col}" fill-opacity="0.5" stroke="${col}"/>` +
         text +
@@ -46,7 +168,7 @@ function boardSvgMarkup(geom, { labels = true } = {}) {
     })
     .join("");
   const inner =
-    `<rect x="0" y="0" width="${W.toFixed(1)}" height="${H.toFixed(1)}" fill="none" stroke="#333"/>` +
+    `<rect x="0" y="0" width="${W.toFixed(1)}" height="${H.toFixed(1)}" fill="none" stroke="rgba(255,255,255,0.1)"/>` +
     parts;
   return { W, H, inner };
 }
@@ -56,14 +178,19 @@ function renderBoard(geom) {
   const { W, H, inner } = boardSvgMarkup(geom, { labels: true });
   host.innerHTML =
     `<svg viewBox="0 0 ${W.toFixed(1)} ${H.toFixed(1)}">` + inner + `</svg>`;
-  host.querySelectorAll(".fp").forEach((g) => {
-    g.addEventListener("click", () => toggleConnector(g.dataset.ref));
-  });
-  updateConnCount();
+  
+  const svg = host.querySelector('svg');
+  svg.addEventListener('mousedown', handleDragStart);
+  svg.addEventListener('mousemove', handleDragMove);
+  window.addEventListener('mouseup', handleDragEnd); // Catch outside drops
+  svg.addEventListener('contextmenu', handleRightClick);
+
+  updateFootprintStats();
 }
 
-function updateConnCount() {
+function updateFootprintStats() {
   $("connCount").textContent = `${state.connectors.size} connectors`;
+  $("lockedCount").textContent = `${state.lockedFootprints.size} locked`;
 }
 
 async function toggleConnector(ref) {
@@ -74,6 +201,13 @@ async function toggleConnector(ref) {
     connectors: [...state.connectors],
   });
   renderBoard(state.geometry);
+}
+
+function toggleLock(ref, reRender = true) {
+  if (state.lockedFootprints.has(ref)) state.lockedFootprints.delete(ref);
+  else state.lockedFootprints.add(ref);
+  if (reRender) renderBoard(state.geometry);
+  else updateFootprintStats();
 }
 
 async function loadBoardView() {
@@ -96,13 +230,13 @@ async function loadBoardView() {
         .filter((f) => f.is_connector_guess)
         .map((f) => f.ref)
   );
+  // Default no locked footprints initially
   $("boardView").hidden = false;
-  $("boardMode").textContent = "before placement";
+  $("boardMode").textContent = "Before placement";
   renderBoard(state.geometry);
   loadPreflight();
 }
 
-// Inspect the board and show the green/amber pre-run checklist.
 async function loadPreflight() {
   if (!state.python || !state.board) return;
   const res = await window.api.preflight({
@@ -115,33 +249,28 @@ async function loadPreflight() {
     panel.hidden = true;
     return;
   }
+  
+  const getIcon = (status) => {
+    if (status === 'ok') return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+    if (status === 'warn') return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>';
+    return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>';
+  };
+
   list.innerHTML = res.rows
     .map(
       (r) =>
         `<li class="pf-row pf-${r.status}">` +
-        `<span class="pf-icon">${r.status === "ok" ? "✓" : "⚠"}</span>` +
+        `<span class="pf-icon">${getIcon(r.status)}</span>` +
+        `<div class="pf-content">` +
         `<span class="pf-label">${r.label}</span>` +
         `<span class="pf-detail">${r.detail}</span>` +
-        `</li>`
+        `</div></li>`
     )
     .join("");
   panel.hidden = false;
 }
 
-const state = {
-  python: null, // verified KiCad python path
-  board: null, // selected .kicad_pcb
-  running: false,
-  geometry: null,
-  connectors: new Set(),
-  refineToolsOk: false, // Java + FreeRouting jar present
-  candidates: [], // [{seed, hpwl_mm, crossings, hpwl_delta_pct, board}]
-  committedSeed: null, // seed of the candidate the user picked
-  refineBoard: null, // board Refine should operate on (the committed output)
-  lastFinished: null, // best guess at the finished routed board (for Finalize)
-};
-
-// ---- python status ---------------------------------------------------------
+// ---- Python ----
 function setPython(info) {
   state.python = info && info.pythonPath;
   const pill = $("pythonPill");
@@ -151,13 +280,11 @@ function setPython(info) {
   pill.classList.remove("pill-ok", "pill-bad", "pill-wait");
   if (state.python) {
     pill.classList.add("pill-ok");
-    text.textContent = info.kicadVersion
-      ? `KiCad ${info.kicadVersion}`
-      : "KiCad Python ready";
+    text.textContent = info.kicadVersion ? `KiCad ${info.kicadVersion}` : "KiCad ready";
     text.title = state.python;
   } else {
     pill.classList.add("pill-bad");
-    text.textContent = "KiCad Python not found";
+    text.textContent = "Python missing";
     text.title = "";
   }
   refreshRunEnabled();
@@ -176,7 +303,7 @@ function setPillWait(msg) {
   $("pythonText").textContent = msg;
 }
 
-// ---- board picker ----------------------------------------------------------
+// ---- Board Picker ----
 async function pickBoard() {
   const p = await window.api.pickBoard();
   if (!p) return;
@@ -195,10 +322,10 @@ function refreshRunEnabled() {
   const fin = $("finalize");
   if (fin) fin.disabled = !ready;
   const cancel = $("cancel");
-  if (cancel) cancel.hidden = !state.running;       // only visible mid-run
+  if (cancel) cancel.hidden = !state.running;
 }
 
-// ---- run -------------------------------------------------------------------
+// ---- Progress ----
 function setProgress(stage, percent) {
   $("progressWrap").hidden = false;
   $("progressStage").textContent = stageLabel(stage);
@@ -261,23 +388,20 @@ function showResults(report, output) {
 
   $("mOverlap").textContent = fmt(report.overlaps_remaining);
   $("mComps").textContent = fmt(a.components);
-  $("mBlocks").textContent = `${report.blocks} block${
-    report.blocks === 1 ? "" : "s"
-  }`;
+  $("mBlocks").textContent = `${report.blocks} block${report.blocks === 1 ? "" : "s"}`;
 
   $("outPath").textContent = output;
-  $("projNote").textContent = report.project_copied
-    ? "· net-class rules carried over"
-    : "";
+  $("projNote").textContent = report.project_copied ? "· net-class rules carried over" : "";
   state.output = output;
 
   const badge = $("resultBadge");
   const fab = report.fab ? ` · ${report.fab}` : "";
-  badge.textContent =
-    `${report.overlaps_remaining === 0 ? "overlap-free" : "needs review"} · seed ${report.seed}${fab}`;
+  const overlaps = report.overlaps_remaining === 0 ? "overlap-free" : "needs review";
+  badge.textContent = `${overlaps} · seed ${report.seed}${fab}`;
+  badge.className = `badge ${report.overlaps_remaining === 0 ? 'badge-success' : 'badge-warning'}`;
 }
 
-// ---- candidate gallery -----------------------------------------------------
+// ---- Candidates ----
 function resetGallery() {
   state.candidates = [];
   $("galleryGrid").innerHTML = "";
@@ -301,7 +425,7 @@ function addCandidateCard(cand) {
     `<div class="cand-thumb"><svg viewBox="0 0 ${W.toFixed(1)} ${H.toFixed(1)}">${inner}</svg></div>` +
     `<div class="cand-meta">` +
     `<span class="cand-seed">seed ${cand.seed}</span>` +
-    `<span class="cand-badge" hidden>best</span>` +
+    `<span class="badge badge-success cand-badge" hidden>best</span>` +
     `</div>` +
     `<div class="cand-metrics">` +
     `${fmt(Math.round(cand.hpwl_mm))} mm ${delta} · ${fmt(cand.crossings)} crossings</div>`;
@@ -315,9 +439,9 @@ function addCandidateError(cand) {
   const card = document.createElement("div");
   card.className = "cand cand-failed";
   card.innerHTML =
-    `<div class="cand-thumb cand-thumb-empty">✕</div>` +
+    `<div class="cand-thumb cand-thumb-empty"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></div>` +
     `<div class="cand-meta"><span class="cand-seed">seed ${cand.seed}</span></div>` +
-    `<div class="cand-metrics">failed: ${cand.error || "placement error"}</div>`;
+    `<div class="cand-metrics text-danger">failed: ${cand.error || "placement error"}</div>`;
   grid.appendChild(card);
 }
 
@@ -336,6 +460,7 @@ function markBestCandidate() {
   }
 }
 
+// ---- Run Flow ----
 async function run() {
   if (state.running) return;
   state.running = true;
@@ -375,8 +500,6 @@ async function run() {
   }
 }
 
-// Commit a previewed candidate: re-run the single-seed place (deterministic, so
-// the saved board matches the thumbnail), then show results + the chosen board.
 async function commitSeed(seed) {
   if (state.running) return;
   state.running = true;
@@ -404,12 +527,15 @@ async function commitSeed(seed) {
     setProgress("done", 100);
     state.committedSeed = seed;
     state.refineBoard = res.output;
-    // carry the connector set next to the saved board so Refine keeps edge pins
     await window.api.saveConnectors({
       board: res.output,
       connectors: [...state.connectors],
     });
     showResults(res.report, res.output);
+    
+    // Add to history
+    addHistoryEntry(`Seed ${seed}`, res.report);
+
     const dump = await window.api.dumpBoard({ python: state.python, board: res.output });
     if (dump.ok) {
       state.geometry = dump.geometry;
@@ -426,6 +552,35 @@ async function commitSeed(seed) {
     openLog(true);
   }
 }
+
+// ---- History ----
+function addHistoryEntry(label, report) {
+  state.historyCounter++;
+  const entry = {
+    id: state.historyCounter,
+    label,
+    hpwl: report.after.hpwl_mm,
+    crossings: report.after.crossings
+  };
+  state.history.push(entry);
+  updateHistoryUI();
+}
+
+function updateHistoryUI() {
+  const panel = $("historyPanel");
+  const list = $("historyList");
+  const count = $("historyCount");
+  if (state.history.length > 0) panel.hidden = false;
+  count.textContent = state.history.length;
+  
+  list.innerHTML = state.history.slice().reverse().map(h => `
+    <div class="history-item" data-id="${h.id}">
+      <span class="font-medium text-main">${h.label}</span>
+      <span class="muted">${fmt(Math.round(h.hpwl))}mm · ${h.crossings}x</span>
+    </div>
+  `).join('');
+}
+
 
 async function runRefine() {
   if (state.running) return;
@@ -456,7 +611,6 @@ async function runRefine() {
   if (res.ok) {
     setProgress("done", 100);
     showResults(res.report, res.output);
-    // the routed board is the natural "finished" board to finalize
     state.lastFinished = res.report.routed_output || res.output;
     $("refineBest").textContent = res.report.routed_pct;
     if (Array.isArray(res.report.history) && res.report.history.length) {
@@ -464,6 +618,9 @@ async function runRefine() {
         "routed %: " + res.report.history.map((h) => (+h).toFixed(1)).join(" → ");
       $("refineHistory").hidden = false;
     }
+    
+    addHistoryEntry(`Refined`, res.report);
+
     const dump = await window.api.dumpBoard({ python: state.python, board: res.output });
     if (dump.ok) {
       state.geometry = dump.geometry;
@@ -481,10 +638,6 @@ async function runRefine() {
   }
 }
 
-// ---- finalize --------------------------------------------------------------
-// Promote a finished routed board to be the project's main .kicad_pcb and sweep
-// the intermediates. Picks the finished file (default = last routed output),
-// then the main process shows a native confirm before anything destructive.
 async function finalizeProject() {
   if (state.running || !state.board) return;
   const finished = await window.api.pickBoard({
@@ -514,7 +667,6 @@ async function finalizeProject() {
       appendLog("Could not delete: " + r.errors.map((e) => e.file).join(", "));
       openLog(true);
     }
-    // the project board now holds the finished design — refresh the view
     state.lastFinished = null;
     state.output = null;
     $("results").hidden = true;
@@ -528,23 +680,47 @@ async function finalizeProject() {
   }
 }
 
-// ---- log toggle ------------------------------------------------------------
 function openLog(force) {
   const log = $("log");
-  const chev = document.querySelector(".chev");
+  const btn = $("logToggle");
   const open = force === undefined ? log.hidden : force;
   log.hidden = !open;
-  chev.classList.toggle("open", open);
+  btn.classList.toggle("open", open);
 }
 
-// ---- wire up ---------------------------------------------------------------
+// ---- Event Listeners ----
+
+$("settingsToggle").addEventListener("click", () => {
+  const content = $("settingsContent");
+  const header = $("settingsToggle");
+  const isOpen = content.classList.contains("open");
+  if (isOpen) {
+    content.classList.remove("open");
+    header.classList.remove("open");
+  } else {
+    content.classList.add("open");
+    header.classList.add("open");
+  }
+});
+
+$("exportSvgBtn").addEventListener("click", () => {
+  const svgWrapper = $("boardCanvas").innerHTML;
+  const blob = new Blob([svgWrapper], {type: "image/svg+xml"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "autoplace_board_layout.svg";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
+
 window.api.onPlaceEvent((evt) => {
   if (evt.type === "progress") setProgress(evt.stage, evt.percent);
   else if (evt.type === "candidate") addCandidateCard(evt);
   else if (evt.type === "candidate-error") addCandidateError(evt);
-  else if (evt.type === "done") {
-    /* gallery completion handled by the run() resolve */
-  } else if (evt.type === "iteration") {
+  else if (evt.type === "iteration") {
     const budget = evt.budget || 1;
     setProgress("refine", Math.round((evt.iter / budget) * 100));
     $("progressStage").textContent = `Refining — iteration ${evt.iter}/${budget}`;
@@ -577,14 +753,11 @@ $("logToggle").addEventListener("click", () => openLog());
 
 async function init() {
   await detect();
-  // Refine needs Java + FreeRouting; gate the button and explain if missing.
   const tools = await window.api.checkRefineTools();
   state.refineToolsOk = tools.ok;
   if (!tools.ok) {
-    const why = !tools.java
-      ? "Java not found on PATH"
-      : `FreeRouting jar missing (${tools.jarPath})`;
-    $("refine").title = `Route-driven refine needs FreeRouting — ${why}`;
+    const why = !tools.java ? "Java not found on PATH" : `FreeRouting missing (${tools.jarPath})`;
+    $("refine").title = `Refine needs FreeRouting — ${why}`;
     $("refineNote").textContent = `Refine disabled: ${why}`;
     $("refineNote").hidden = false;
   }
