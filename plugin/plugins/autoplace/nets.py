@@ -6,7 +6,7 @@ import re
 # Net leaf names treated as ground references.
 _GROUND_LEAVES = {"GND", "AGND", "DGND", "PGND", "GNDA", "GNDD", "EARTH"}
 # Explicit power-rail leaf names (beyond the +N / -N numeric pattern).
-_POWER_LEAVES = {"VCC", "VDD", "VBAT", "VIN", "VOUT", "VBUS", "VMOT", "VDDA", "VCCA"}
+_POWER_LEAVES = {"VCC", "VDD", "VBAT", "VIN", "VOUT", "VBUS", "VMOT", "VDDA", "VCCA", "VSS"}
 _POWER_RE = re.compile(r"^[+-]\d")                       # +15V2, +5V_PWR, -15V
 _SENSE_RE = re.compile(r"SENSE|ISNS|ISEN|VSEN|FB|FEEDBACK|VREF|ADC")
 
