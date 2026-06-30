@@ -169,6 +169,34 @@ def cmd_finalize(args):
     return 0
 
 
+def cmd_preflight(args):
+    """Inspect a board and emit pre-run checklist rows for the desktop app."""
+    import pcbnew
+    from autoplace import preflight
+    in_path = args[0]
+    pcb = pcbnew.LoadBoard(in_path)
+
+    fps = list(pcb.GetFootprints())
+    locked = sum(1 for f in fps if f.IsLocked())
+    has_outline = any(d.GetLayer() == pcbnew.Edge_Cuts for d in pcb.GetDrawings())
+    gnd = kicad_io.find_gnd_net(pcb)
+    pours = []
+    for i in range(pcb.GetAreaCount()):
+        z = pcb.GetArea(i)
+        if z.IsOnLayer(pcbnew.B_Cu) or z.IsOnLayer(pcbnew.F_Cu):
+            pours.append({"layer": pcb.GetLayerName(z.GetLayer()),
+                          "net": z.GetNetname()})
+    info = {
+        "has_outline": has_outline,
+        "footprints": len(fps), "movable": len(fps) - locked, "locked": locked,
+        "gnd_net": gnd.GetNetname() if gnd is not None else None,
+        "pours": pours,
+    }
+    sys.stdout.write(json.dumps(
+        {"type": "preflight", "rows": preflight.evaluate(info), "info": info}) + "\n")
+    return 0
+
+
 def cmd_metrics(args):
     """Just print metrics for a board, no placement (baseline measurement)."""
     from autoplace import metrics
@@ -258,7 +286,7 @@ def _refine_out(in_path):
 def main(argv):
     cmds = {"place": cmd_place, "place-multi": cmd_place_multi,
             "metrics": cmd_metrics, "dump": cmd_dump, "refine": cmd_refine,
-            "finalize": cmd_finalize}
+            "finalize": cmd_finalize, "preflight": cmd_preflight}
     if len(argv) < 2 or argv[1] not in cmds:
         print(__doc__)
         return 2
