@@ -12,13 +12,13 @@ from __future__ import annotations
 import copy
 from typing import Iterator
 
-from . import engine, serialize
+from . import engine, metrics, serialize
 from .model import Board
 
 
 def run_candidates(model: Board, count: int, *, strategy: str = "auto",
                    connectors: list[str] | None = None,
-                   margin: float = 0.8) -> Iterator[dict]:
+                   margin: float = 0.8, track: float = 1.0) -> Iterator[dict]:
     """Yield one candidate dict for each seed in ``0..count-1``.
 
     Each seed places a fresh deep copy of ``model`` (``engine.place`` mutates
@@ -42,5 +42,8 @@ def run_candidates(model: Board, count: int, *, strategy: str = "auto",
             "crossings": after["crossings"],
             "overlaps": report["overlaps_remaining"],
             "hpwl_delta_pct": report["hpwl_delta_pct"],
+            "sheet_spread_score": metrics.sheet_spread_score(board),
+            "pinch_fraction": metrics.pinch_fraction(board, margin, track),
+            "whitespace_connectivity": metrics.whitespace_connectivity(board),
             "board": serialize.board_to_dict(board),
         }

@@ -114,7 +114,7 @@ def cmd_place_multi(args):
     connectors = _read_connectors(in_path)
     for i, cand in enumerate(multiseed.run_candidates(
             model, count, strategy=strategy, connectors=connectors,
-            margin=fabrication.margin_for(fab))):
+            margin=fabrication.margin_for(fab), track=fabrication.track_for(fab))):
         cand["index"] = i
         cand["count"] = count
         emit({"type": "progress", "stage": "place",

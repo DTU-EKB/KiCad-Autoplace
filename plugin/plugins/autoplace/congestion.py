@@ -14,7 +14,7 @@ from __future__ import annotations
 import math
 import re
 
-from .metrics import _is_power
+from .metrics import _is_power, CELL_MM
 from .model import Board
 
 _RES_RE = re.compile(r"\(resolution\s+um\s+(\d+)\)")
@@ -54,7 +54,7 @@ def _points(coord_block: str, scale: float):
             for i in range(0, len(nums) - 1, 2)]
 
 
-def parse(ses_path: str, board: Board, cell_mm: float = 5.0) -> CongestionField:
+def parse(ses_path: str, board: Board, cell_mm: float = CELL_MM) -> CongestionField:
     with open(ses_path, encoding="utf-8") as f:
         text = f.read()
     scale = _scale(text)

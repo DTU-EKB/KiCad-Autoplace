@@ -42,7 +42,11 @@ def test_count_and_shape():
     assert len(cands) == 6
     for c in cands:
         assert set(c) >= {"seed", "hpwl_mm", "crossings", "overlaps",
-                          "hpwl_delta_pct", "board"}
+                          "hpwl_delta_pct", "sheet_spread_score",
+                          "pinch_fraction", "whitespace_connectivity", "board"}
+        assert isinstance(c["sheet_spread_score"], float)
+        assert isinstance(c["pinch_fraction"], float)
+        assert isinstance(c["whitespace_connectivity"], float)
         assert c["board"]["footprints"]
 
 
