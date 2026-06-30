@@ -353,6 +353,56 @@ input:focus {
   word-break: break-all;
 }
 
+/* ---------- preflight ---------- */
+.preflight {
+  margin-top: 16px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.pf-head {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.pf-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pf-row {
+  display: grid;
+  grid-template-columns: 18px 120px 1fr;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12.5px;
+}
+.pf-icon {
+  font-weight: 700;
+  text-align: center;
+}
+.pf-ok .pf-icon {
+  color: var(--good);
+}
+.pf-warn .pf-icon {
+  color: var(--warn);
+}
+.pf-label {
+  color: var(--text);
+}
+.pf-detail {
+  color: var(--muted);
+}
+.pf-warn .pf-detail {
+  color: var(--warn);
+}
+
 /* ---------- candidate gallery ---------- */
 .gallery-grid {
   display: grid;
