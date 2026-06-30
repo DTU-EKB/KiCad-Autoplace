@@ -277,6 +277,8 @@ function runPlaceMulti(win, { board, python, strategy, count, fab }) {
             return send(obj);
           }
           if (obj.type === "done") return send(obj);
+          if (obj.type === "ranking" || obj.type === "route-result" ||
+              obj.type === "route-skipped") return send(obj);
         } catch {
           /* fall through to log */
         }
