@@ -118,3 +118,52 @@ def test_tall_clearance_penalises_short_near_tall_and_zero_when_none():
     b2.components = {"A": Component("A", 4, 4, x=20, y=20, height=3.0),
                      "B": Component("B", 4, 4, x=27.5, y=20, height=3.0)}
     assert metrics.tall_clearance(b2) == 0.0
+
+
+# ---------- G3: alignment_score ----------
+
+def _part_block(ref, x, y, block="BLK", w=4.0, h=4.0, locked=False, edge=""):
+    """Helper for alignment_score tests (adds block= kwarg)."""
+    return Component(ref=ref, w=w, h=h, x=x, y=y, block=block,
+                     locked=locked, edge=edge, pads=[Pad("1", "N", 0.0, 0.0)])
+
+
+def test_alignment_score_lower_after_align():
+    """alignment_score improves (decreases) after aesthetic.align on a clusterable board."""
+    from autoplace import aesthetic
+    b = Board(0, 0, 100, 100)
+    # Three parts in the same block at nearly-same X (within tol) but not on-grid.
+    b.components = {
+        "R1": _part_block("R1", 10.0, 10.0),
+        "R2": _part_block("R2", 10.4, 30.0),
+        "R3": _part_block("R3", 11.2, 50.0),
+    }
+    score_before = metrics.alignment_score(b)
+    assert score_before > 0.0, f"Expected nonzero score before align, got {score_before}"
+    aesthetic.align(b, grid=0.5, margin=0.8)
+    score_after = metrics.alignment_score(b)
+    assert score_after < score_before, (
+        f"Expected alignment_score to decrease; before={score_before}, after={score_after}")
+
+
+def test_alignment_score_zero_when_no_clusterable_block():
+    """alignment_score returns 0.0 when no block has >=2 parts within tol on any axis."""
+    b = Board(0, 0, 100, 100)
+    # Two singletons in different blocks, far apart on both axes.
+    b.components = {
+        "R1": _part_block("R1", 10.0, 10.0, block="A"),
+        "R2": _part_block("R2", 50.0, 50.0, block="B"),
+    }
+    assert metrics.alignment_score(b) == 0.0
+
+
+def test_alignment_score_zero_after_perfect_alignment():
+    """alignment_score returns 0.0 when all clusterable parts are already on one line."""
+    b = Board(0, 0, 100, 100)
+    # All three parts already share the same X (already aligned).
+    b.components = {
+        "R1": _part_block("R1", 10.0, 10.0),
+        "R2": _part_block("R2", 10.0, 30.0),
+        "R3": _part_block("R3", 10.0, 50.0),
+    }
+    assert metrics.alignment_score(b) == 0.0
