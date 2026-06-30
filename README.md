@@ -1,69 +1,93 @@
 # KiCad-Autoplace
 
-Connectivity-aware **automatic PCB component placement** for KiCad 9, maintained
-for students at DTU Ballerup Campus. A companion to
-[KiCad-components](https://github.com/DTU-EKB/KiCad-components): that repo gives
-you the symbols and footprints, this one places them.
+Connectivity-aware **automatic PCB placement and single-sided routing** for KiCad,
+as a desktop app. Built for students at DTU Ballerup Campus. A companion to
+[KiCad-components](https://github.com/DTU-EKB/KiCad-components) — that repo gives
+you the symbols and footprints, this one places and routes them.
 
-Lock the parts you care about (connectors, mounting holes), press the button, and
-the engine places the rest — minimising wirelength and keeping the board
-single-sided-routable so the existing routing workflow can finish it.
+You prepare the board in KiCad (outline, locked crucial parts, ground pours),
+then the app places the rest, routes it with FreeRouting, and hands back a
+finished `.kicad_pcb`.
 
-> Status: **0.1.0 / development.** Pipeline: block detection → force-directed
-> global → simulated-annealing refine (translate / rotate / swap) → legalize.
-> Runs on **KiCad 9 and 10** boards, always overlap-free, and now beats the
-> hand-placement on wirelength *and* crossings for **all 12 test boards**
-> (feedback_circuit −75% / crossings 22→0, buck −70% / 0→0, system −38% /
-> 438→219). See [`docs/BUILD_SPEC.md`](docs/BUILD_SPEC.md) §7 for the full table
-> and the SA selection-metric fix that got there.
+## What it does
 
-## Install (KiCad Plugin & Content Manager)
-Go to *Plugin and Content Manager* on the KiCad project screen → *Manage…* beside
-the Repository dropdown → **+** → paste:
+- **Multi-seed placement** — generates several placements and shows them as a
+  gallery; you pick the one you like.
+- **Connectors on edges** — click footprints to mark them; they're auto-placed on
+  the board edge. **Locked** parts are never moved.
+- **Ground/power planes** — fills every copper pour on its own net so the router
+  treats GND/power as planes instead of routing them as traces.
+- **Fabrication profiles** — CNC mill (0.85 mm) or fiber laser (0.8 mm) sets the
+  clearance/track rules on the output.
+- **Route-driven refinement** — routes with FreeRouting and re-anneals congested
+  spots; **single-** or **double-sided** (single-sided ends up on B.Cu).
+- **Finalize** — promotes the routed board to the project's main `.kicad_pcb` and
+  sweeps the intermediate files (keeps a `.bak`).
+- **Pre-run checklist** — flags a missing outline, ground net, or pours before you
+  run.
+
+## Requirements
+
+- **KiCad 10** (the app uses its bundled `pcbnew`; auto-detected).
+- **Node.js** to run the Electron app.
+- **Java + FreeRouting** for routing/refine — jar at
+  `~/.freerouting/freerouting-1.9.0.jar`.
+
+## Run the app
+
+```bash
+cd app
+npm install
+npm start
 ```
-https://raw.githubusercontent.com/DTU-EKB/KiCad-Autoplace/main/repository.json
-```
-Refresh the manager, install **DTU EKB Autoplace**, restart KiCad. A toolbar
-button appears in the PCB editor.
 
-## Use
-1. Open your board in the PCB editor.
-2. **Lock** the footprints that must stay put (edge connectors, mounting holes).
-3. Click **Autoplace (DTU-EKB)** in the toolbar.
-4. Review the before/after report (HPWL, crossings, overlaps). Reload if needed.
+## Prepare your board first (in KiCad)
 
-The engine never moves locked footprints and guarantees an overlap-free result.
+- Draw the **Edge.Cuts** outline (the placement boundary).
+- **Lock** any crucial parts you've hand-placed — they won't be moved.
+- Add **GND** (and power) copper **pours**.
+
+The app's pre-run checklist tells you if any of these are missing.
+
+## Workflow in the app
+
+1. Select your `.kicad_pcb`.
+2. Click the connector footprints to mark them (placed on edges).
+3. Pick **Fabrication** (CNC / laser) and **Routing** (single / double sided).
+4. **Run AutoPlacement** → pick the best candidate from the gallery.
+5. **Refine** (route-driven) → review the routed %.
+6. **Finalize project** → promotes the routed board and cleans up.
 
 ## Develop / run headless
-The engine core is pure Python (no `pcbnew`); only `kicad_io` touches KiCad. Run
-the dev CLI with KiCad's bundled Python:
-```powershell
-& "C:\Program Files\KiCad\9.0\bin\python.exe" cli.py metrics  board.kicad_pcb
-& "C:\Program Files\KiCad\9.0\bin\python.exe" cli.py place    board.kicad_pcb out.kicad_pcb
-```
-`place` writes `<stem>.autoplaced.kicad_pcb` by default — it never overwrites the
-input unless you pass an output path equal to it.
 
-Unit tests for the headless core run under any Python:
+The engine core is pure Python (no `pcbnew`); `kicad_io` / `routing` / `refine`
+bridge KiCad. Run subcommands with KiCad's Python:
+
+```powershell
+& "C:\Program Files\KiCad\10.0\bin\python.exe" cli.py place    board.kicad_pcb
+& "C:\Program Files\KiCad\10.0\bin\python.exe" cli.py preflight board.kicad_pcb
+```
+
+Subcommands: `place`, `place-multi`, `refine`, `finalize`, `preflight`, `dump`,
+`metrics`. The headless unit tests run under any Python:
+
 ```bash
 python -m pytest tests/
 ```
 
 ## Layout
+
 ```
-plugin/                 # zipped & installed by PCM
-  metadata.json         # PCM package manifest (type: plugin)
-  plugins/              # lands in KiCad's 3rd-party plugins dir
-    __init__.py         # registers the Action Plugin
-    action_autoplace.py # toolbar button -> runs the engine on the open board
-    autoplace/          # the engine (pure-Python core + kicad_io bridge)
-  resources/icon.png
-repository.json         # PCM repo feed (add this URL to KiCad)
-packages.json           # PCM package list
-docs/BUILD_SPEC.md      # full design spec & milestones
-cli.py                  # dev / headless runner
-tests/                  # headless unit tests
+app/                       # Electron desktop app (main / preload / renderer)
+plugin/plugins/autoplace/  # engine: pure-Python core + kicad_io/routing/refine
+cli.py                     # headless runner the app drives
+tests/                     # headless unit tests (no pcbnew)
+docs/                      # design specs (docs/superpowers/specs)
 ```
 
+The same engine also ships as a KiCad PCM plugin (`plugin/`, `repository.json`),
+but the desktop app is the primary interface.
+
 ## License
+
 MIT — see [LICENSE](LICENSE).
