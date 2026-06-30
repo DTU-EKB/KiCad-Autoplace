@@ -281,3 +281,48 @@ def test_gutter_boundary_moves_with_channel_scale():
     assert half._pair_penalty(a, bb, 0.8) == 0            # 4.0 >= 3.5 -> no penalty at scale 0.5
     full = anneal.Annealer(b, margin=0.8, seed=0, channel_scale=1.0)  # target 4.4
     assert full._pair_penalty(a, bb, 0.8) > 0             # SAME pair penalised -> boundary moved
+
+
+def test_decap_term_pulls_cap_toward_its_ic():
+    import copy
+    from autoplace import anneal, electrical
+
+    def _board_with_decap():
+        b = Board(0, 0, 60, 60)
+        b.components = {
+            "U1": Component("U1", 6, 6, x=10, y=10, pads=[
+                Pad("1", "+5V", -2.0, 0.0), Pad("2", "GND", 2.0, 0.0),
+                Pad("3", "SIG", 0.0, 2.0)]),
+            "C1": Component("C1", 2, 1, x=50, y=50, pads=[
+                Pad("1", "+5V", -0.8, 0.0), Pad("2", "GND", 0.8, 0.0)]),
+            "R1": _two_pin("R1", 30, 30, "SIG", "N1"),
+            "R2": _two_pin("R2", 40, 20, "N1", "N2"),
+        }
+        return b
+
+    on = _board_with_decap()
+    assert electrical.decoupling_pairs(on)["C1"][1] == "U1"
+    off = copy.deepcopy(on)
+
+    a_on = anneal.Annealer(on, margin=0.8, seed=1)
+    a_on.run(steps=5000)
+    a_off = anneal.Annealer(off, margin=0.8, seed=1)
+    a_off.decap = {}                        # disable just the decap term
+    a_off.run(steps=5000)
+
+    def dist(board):
+        cap, ic = board.components["C1"], board.components["U1"]
+        cx, cy = cap.pad_world(cap.pads[0])
+        ix, iy = ic.pad_world(ic.pads[0])
+        return ((ix - cx) ** 2 + (iy - cy) ** 2) ** 0.5
+
+    assert dist(on) < dist(off)             # the term pulled the cap closer to U1
+    assert metrics.overlaps(on) == []
+
+
+def test_decap_penalty_zero_without_pairs():
+    from autoplace import anneal
+    b = _board()                            # no decaps
+    a = anneal.Annealer(b, margin=0.8, seed=0)
+    assert a.decap == {}
+    assert a._decap_penalty(b.components["R1"]) == 0.0

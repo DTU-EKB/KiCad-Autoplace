@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import math
 
-from . import geom
+from . import electrical, geom
 from .blocks import block_centroids
 from .edge import pin_to_edge
 from .metrics import _is_power, channel_width
@@ -36,7 +36,12 @@ class _Weights:
     COHESION = 0.35       # component distance to its block centroid
     CHANNEL = 4.0         # soft penalty for gaps narrower than a routing channel
     CONG_K = 3.0          # per-unit-pressure multiplier on the channel term
+    DECAP = 1.5           # pull a decoupling cap toward its IC power pin (search bias)
 
+
+# Target gap (mm) a decoupling cap should sit within of its IC power pin (loop
+# inductance is dominated beyond a few mm). The decap term pays only beyond this.
+DECAP_TARGET_MM = 3.0
 
 # Extra cross-block gutter beyond the single-track channel = one more routing
 # track (track + clearance), scaled by channel_scale so dense boards relax it.
@@ -78,6 +83,9 @@ class Annealer:
             for r, _ in members:
                 self.comp_nets[r].add(net)
         self.centroids = block_centroids(board)
+        # decoupling cap -> (cap_rail_pad_idx, ic_ref, ic_rail_pad_idx); computed once
+        # on the seed positions so the pairing is stable across the anneal.
+        self.decap = electrical.decoupling_pairs(board)
 
     # ---- cost pieces -----------------------------------------------------
     def _net_hpwl(self, net: str) -> float:
@@ -120,6 +128,18 @@ class Annealer:
     def _cohesion(self, c) -> float:
         cx, cy = self.centroids.get(c.block, (c.x, c.y))
         return math.hypot(c.x - cx, c.y - cy)
+
+    def _decap_penalty(self, c) -> float:
+        """Hinge: how far a decoupling cap's rail pad is beyond DECAP_TARGET_MM from
+        its paired IC power pin. 0 for non-decaps and within-target caps."""
+        t = self.decap.get(c.ref)
+        if t is None:
+            return 0.0
+        cap_idx, ic_ref, ic_idx = t
+        ic = self.board.components[ic_ref]
+        cx, cy = c.pad_world(c.pads[cap_idx])
+        ix, iy = ic.pad_world(ic.pads[ic_idx])
+        return max(0.0, math.hypot(ix - cx, iy - cy) - DECAP_TARGET_MM)
 
     def _quality(self) -> float:
         """Selection metric: wirelength + the hard overlap barrier only.
@@ -169,6 +189,7 @@ class Annealer:
             if c.is_connector:
                 cost += W.EDGE * self._edge_dist(c)
             cost += self.cohesion * self._cohesion(c)
+            cost += W.DECAP * self._decap_penalty(c)
         return cost
 
     def _clamp(self, c):
