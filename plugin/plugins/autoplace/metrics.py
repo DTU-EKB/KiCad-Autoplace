@@ -254,6 +254,39 @@ def whitespace_connectivity(board: Board, cell_mm: float = CELL_MM) -> float:
     return round(largest / total_empty, 4)
 
 
+# Tall-part DFM spacing. A part at/above TALL_MM casts a "shadow" -- small parts
+# near it can't be hand-soldered / reworked -- so it wants TALL_HALO_MM extra
+# neighbor clearance. Shared by anneal._pair_penalty and tall_clearance below.
+TALL_MM = 8.0
+TALL_HALO_MM = 2.0
+
+
+def tall_clearance(board: Board, margin: float = 0.8, track: float = 1.0) -> float:
+    """Mean shortfall (mm) of tall-part neighbor gaps below the tall halo target.
+
+    Over neighbor pairs that include a tall part (height >= TALL_MM) and shadow on
+    one axis (perpendicular gap < margin), the mean of max(0, halo_target - gap),
+    where halo_target = channel_width(margin, track) + TALL_HALO_MM. Lower is
+    better; 0.0 when no tall part shadows a neighbor. Pure; shares the constants
+    with the placement term so metric and term stay in lockstep."""
+    target = channel_width(margin, track) + TALL_HALO_MM
+    comps = list(board.components.values())
+    n = 0
+    total = 0.0
+    for i in range(len(comps)):
+        a = comps[i]
+        for j in range(i + 1, len(comps)):
+            b = comps[j]
+            if max(a.height, b.height) < TALL_MM:
+                continue
+            gx = abs(a.x - b.x) - (a.eff_w + b.eff_w) / 2
+            gy = abs(a.y - b.y) - (a.eff_h + b.eff_h) / 2
+            if min(gx, gy) < margin:           # shadow
+                n += 1
+                total += max(0.0, target - max(gx, gy))
+    return round(total / n, 3) if n else 0.0
+
+
 def decap_proximity(board: Board) -> float:
     """Mean decoupling-cap -> IC-power-pin distance (mm) over detected pairs.
 

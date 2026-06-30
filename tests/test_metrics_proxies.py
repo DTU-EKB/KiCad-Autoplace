@@ -100,3 +100,21 @@ def test_decap_proximity_mean_distance_and_zero_when_none():
     b2.components = {"R1": Component("R1", 2, 1, x=5, y=5,
                                      pads=[Pad("1", "A", -0.8, 0), Pad("2", "B", 0.8, 0)])}
     assert metrics.decap_proximity(b2) == 0.0
+
+
+def test_tall_clearance_penalises_short_near_tall_and_zero_when_none():
+    from autoplace.model import Board, Component
+    # tall part U1 (height 18) with a short R1 (height 3) inside its halo
+    b = Board(0, 0, 80, 80)
+    u1 = Component("U1", 4, 4, x=20, y=20, height=18.0)
+    r1 = Component("R1", 4, 4, x=27.5, y=20, height=3.0)   # gx = 3.5
+    b.components = {"U1": u1, "R1": r1}
+    # halo target = channel_width(0.8,1.0)=2.6 + TALL_HALO_MM 2.0 = 4.6; gap 3.5 < 4.6 -> shortfall 1.1
+    d = metrics.tall_clearance(b)
+    assert 1.0 < d < 1.2
+
+    # no tall parts -> 0.0
+    b2 = Board(0, 0, 80, 80)
+    b2.components = {"A": Component("A", 4, 4, x=20, y=20, height=3.0),
+                     "B": Component("B", 4, 4, x=27.5, y=20, height=3.0)}
+    assert metrics.tall_clearance(b2) == 0.0
