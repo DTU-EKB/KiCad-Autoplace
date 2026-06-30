@@ -23,6 +23,28 @@ from . import strip as strip_mod
 from .kicad_io import force_gnd_zones, unrouted_count
 
 
+def _flip_to_bottom(routed_pcb: str) -> None:
+    """Move all routed copper from F.Cu to B.Cu in a saved single-sided board.
+
+    FreeRouting routes the one copper layer KiCad exposes (F.Cu); a CNC/etch board
+    wants the copper on the bottom. Reload fresh (``GetTracks`` is iterable again
+    after a load, unlike on the just-imported board), re-enable B.Cu, and move
+    every F.Cu track and pour to B.Cu. Footprint pads are untouched, so components
+    stay on top. The board keeps two layers with F.Cu empty -- fine for a
+    single-sided etch.
+    """
+    b = pcbnew.LoadBoard(routed_pcb)
+    b.SetCopperLayerCount(2)                     # re-enable B.Cu as a target
+    for t in b.GetTracks():
+        if t.GetLayer() == pcbnew.F_Cu:
+            t.SetLayer(pcbnew.B_Cu)
+    for i in range(b.GetAreaCount()):
+        z = b.GetArea(i)
+        if z.IsOnLayer(pcbnew.F_Cu):
+            z.SetLayer(pcbnew.B_Cu)
+    pcbnew.SaveBoard(routed_pcb, b)
+
+
 def route_once(pcb_path: str, jar: str, passes: int, stem: str = None,
                sides: int = 2) -> dict:
     """Load ``pcb_path`` fresh, route it once with FreeRouting, report completion.
@@ -36,8 +58,9 @@ def route_once(pcb_path: str, jar: str, passes: int, stem: str = None,
     removal access-violates), then the board is reduced to one copper layer
     (``SetCopperLayerCount(1)`` -> F.Cu) and re-routed from scratch, leaving
     uncrossable nets unrouted. (FreeRouting ignores Specctra layer ``type``, so
-    cutting the layer count is the reliable lever.) The single copper layer is the
-    front; the etched side is chosen when the board is exported/mirrored.
+    cutting the layer count is the reliable lever.) FreeRouting routes the front
+    layer KiCad exposes; the result is then flipped to B.Cu so the copper lands on
+    the bottom (etch side).
     """
     if sides == 1:
         # Clean slate: drop any prior routing so we re-route on one layer (and so
@@ -88,6 +111,8 @@ def route_once(pcb_path: str, jar: str, passes: int, stem: str = None,
     routed = total - left
     routed_pcb = stem + ".routed.kicad_pcb"
     pcbnew.SaveBoard(routed_pcb, board)
+    if sides == 1:
+        _flip_to_bottom(routed_pcb)             # single-sided copper -> B.Cu
     return {
         "total": total, "routed": routed, "unrouted": left,
         "pct": (100.0 * routed / total if total else 100.0),

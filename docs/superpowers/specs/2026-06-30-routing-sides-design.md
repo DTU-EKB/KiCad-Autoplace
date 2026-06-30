@@ -14,8 +14,8 @@ leaving nets that can't route on one layer as ratsnest to hand-jumper.
 - A **Routing** control with two modes: **Double-sided** (default, current
   behaviour) and **Single-sided (bottom)** = B.Cu only.
 - Single-sided leaves uncrossable nets **unrouted** (no two-stage top fallback).
-- Single-sided routes on **B.Cu** (the etch/CNC side). `SetCopperLayerCount(1)`
-  keeps F.Cu (wrong side), so the mechanism constrains the DSN instead.
+- Single-sided copper ends on **B.Cu** (the etch/CNC side). FreeRouting routes the
+  one layer KiCad exposes (F.Cu); the result is flipped to B.Cu afterward.
 - Independent of the fabrication profile (mixable); affects the routing step only
   (placement unchanged).
 
@@ -41,10 +41,15 @@ In `route_once`, gated by a new `sides` parameter (default `2`):
      (`layer name 'B.Cu' not found`). `SetLayer` avoids `pcb.Remove`, which
      corrupts the KiCad-10 connectivity object.
   4. Export + route as usual; uncrossable nets are left unrouted.
+  5. **Flip the routed copper to B.Cu** (`_flip_to_bottom`): reload the saved
+     board (so `GetTracks` is iterable again — it is not on the just-imported
+     board), re-enable B.Cu, and move every F.Cu track and pour to B.Cu.
+     Footprint pads are untouched, so components stay on top. The board keeps two
+     layers with F.Cu empty — fine for a single-sided etch.
 
-The single copper layer is the front (F.Cu); the etched side is chosen at
-export/mirror. Verified end-to-end on the system board: 0 warnings, tracks on
-F.Cu only, B.Cu pour relocated.
+FreeRouting routes the front layer KiCad exposes; the result is flipped so the
+copper lands on the **bottom** (etch side). Verified end-to-end: 0 warnings,
+tracks and pours all on B.Cu.
 
 ## GND-zone interaction
 
@@ -143,5 +148,5 @@ F.Cu, and a higher routed-% than the no-strip attempt; double-sided unchanged.
 ## Out of scope (YAGNI)
 
 - Two-stage (bottom-then-top) single-sided routing.
-- Choosing which physical side via the UI (single layer is F.Cu; mirror at export).
+- Choosing which physical side via the UI (single-sided always lands on B.Cu).
 - Applying `sides` to `place` output (routing-time decision only).
