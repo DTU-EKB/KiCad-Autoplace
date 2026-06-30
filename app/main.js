@@ -302,7 +302,7 @@ function runPlaceMulti(win, { board, python, strategy, count, fab }) {
   });
 }
 
-function runRefine(win, { board, python, seed, budget, passes, fab }) {
+function runRefine(win, { board, python, seed, budget, passes, fab, sides }) {
   return new Promise((resolve) => {
     if (!fs.existsSync(CLI_PY)) {
       return resolve({ ok: false, error: `cli.py not found at ${CLI_PY}` });
@@ -312,7 +312,10 @@ function runRefine(win, { board, python, seed, budget, passes, fab }) {
     const send = (evt) => {
       if (!win.isDestroyed()) win.webContents.send("place-event", evt);
     };
-    const env = { ...process.env, AUTOPLACE_STREAM: "1", FAB: fab || "cnc" };
+    const env = {
+      ...process.env, AUTOPLACE_STREAM: "1",
+      FAB: fab || "cnc", SIDES: String(sides || 2),
+    };
     if (budget) env.REFINE_BUDGET = String(budget);   // effort -> loop length
     if (passes) env.REFINE_PASSES = String(passes);   // FreeRouting passes/route
     const args = [CLI_PY, "refine", board, out, String(seed ?? 0)];

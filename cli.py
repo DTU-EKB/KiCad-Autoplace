@@ -204,6 +204,7 @@ def cmd_refine(args):
     jar = os.environ.get("FREEROUTING_JAR", DEFAULT_JAR)
     passes = int(os.environ.get("REFINE_PASSES", "20"))
     budget = int(os.environ.get("REFINE_BUDGET", "8"))
+    sides = int(os.environ.get("SIDES", "2"))         # 1 = single-sided (B.Cu)
     stream = os.environ.get("AUTOPLACE_STREAM") == "1"
 
     def emit(obj):
@@ -230,7 +231,7 @@ def cmd_refine(args):
     r = refine_mod.refine(model, pcb, jar=jar, work_pcb=out_path, passes=passes,
                           seed=seed, budget=budget,
                           place_margin=fabrication.margin_for(fab),
-                          progress=progress)
+                          sides=sides, progress=progress)
     kicad_io.apply_placement(model, pcb, out_path)        # write the best placement
     stem = os.path.splitext(out_path)[0]
     report = {"input": in_path, "output": out_path,

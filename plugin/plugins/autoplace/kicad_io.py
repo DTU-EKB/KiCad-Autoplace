@@ -140,18 +140,20 @@ def force_gnd_zones(pcb: "pcbnew.BOARD") -> dict:
 
     The pipeline inherits zone nets from the input board; a board that arrives
     with no-net pours (e.g. the laser flow's net-less zones) would otherwise keep
-    them. Single-sided CNC/etch boards want a real GND pour, so this normalises
-    the bottom/top copper zones to GND and refills them (so the pour connects to
-    GND pads). No-op when the board has no GND net.
+    them. CNC/etch boards want a real GND pour, so this normalises the copper
+    zones to GND and refills them (so the pour connects to GND pads). No-op when
+    the board has no GND net. Zones on a disabled copper layer (e.g. B.Cu after a
+    single-sided ``SetCopperLayerCount(1)``) are skipped.
     """
     net = pcb.FindNet(GND_NET)
     if net is None:
         return {"set": [], "skipped": "no GND net"}
+    enabled = pcb.GetEnabledLayers()
     changed = []
     for i in range(pcb.GetAreaCount()):
         z = pcb.GetArea(i)
         on = [name for name, lid in (("B.Cu", pcbnew.B_Cu), ("F.Cu", pcbnew.F_Cu))
-              if z.IsOnLayer(lid)]
+              if z.IsOnLayer(lid) and enabled.Contains(lid)]
         if on:
             z.SetNet(net)
             changed.extend(on)

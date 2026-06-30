@@ -419,6 +419,7 @@ async function runRefine() {
     python: state.python,
     seed: state.committedSeed ?? 0,
     fab: $("fab").value,
+    sides: parseInt($("sides").value, 10) || 2,
     budget: eff.budget,
     passes: eff.passes,
   });
