@@ -252,3 +252,23 @@ def whitespace_connectivity(board: Board, cell_mm: float = CELL_MM) -> float:
                         stack.append((jx, jy))
             largest = max(largest, size)
     return round(largest / total_empty, 4)
+
+
+def decap_proximity(board: Board) -> float:
+    """Mean decoupling-cap -> IC-power-pin distance (mm) over detected pairs.
+
+    Lower is better. 0.0 when the board has no decoupling pairs (so decap-free
+    boards stay neutral in candidate ranking). Pure; uses the same pad pair the
+    placement term uses."""
+    from . import electrical
+    pairs = electrical.decoupling_pairs(board)
+    if not pairs:
+        return 0.0
+    total = 0.0
+    for cap_ref, (cap_idx, ic_ref, ic_idx) in pairs.items():
+        cap = board.components[cap_ref]
+        ic = board.components[ic_ref]
+        cx, cy = cap.pad_world(cap.pads[cap_idx])
+        ix, iy = ic.pad_world(ic.pads[ic_idx])
+        total += math.hypot(ix - cx, iy - cy)
+    return round(total / len(pairs), 3)
