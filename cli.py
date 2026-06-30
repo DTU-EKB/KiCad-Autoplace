@@ -92,6 +92,30 @@ def cmd_place(args):
     return 0
 
 
+def _route_candidate(model, pcb, in_path, fab, seed, jar, passes, sides,
+                     strategy, connectors):
+    """Re-place ``seed`` (deterministic) and route it; return routed %.
+
+    Writes scratch ``_placemulti_cand<seed>.*`` in the CWD (the app sets CWD to a
+    writable userData dir). Net-class widths come from the copied .kicad_pro."""
+    import copy
+
+    import pcbnew
+
+    from autoplace import engine, fabrication, kicad_io, routing
+    cand = copy.deepcopy(model)
+    engine.place(cand, seed=seed, strategy=strategy, connectors=connectors,
+                 margin=fabrication.margin_for(fab),
+                 track=fabrication.track_for(fab))
+    work = os.path.join(os.getcwd(), f"_placemulti_cand{seed}.kicad_pcb")
+    kicad_io.apply_to_board(cand, pcb)
+    pcbnew.SaveBoard(work, pcb)
+    kicad_io.copy_project(in_path, work)
+    _apply_fab(work, fab)
+    r = routing.route_once(work, jar, passes, sides=sides)
+    return r["pct"]
+
+
 def cmd_place_multi(args):
     """Run N seeds and stream one candidate (geometry + metrics) per seed.
 
@@ -110,7 +134,7 @@ def cmd_place_multi(args):
     strategy = os.environ.get("STRATEGY", "auto")
     fab = _fab()
     emit({"type": "progress", "stage": "load", "percent": 0.0})
-    model, _ = kicad_io.load_board(in_path)
+    model, pcb = kicad_io.load_board(in_path)
     connectors = _read_connectors(in_path)
     buf = []
     keys = ("seed", "overlaps", "sheet_spread_score", "pinch_fraction",
@@ -130,6 +154,31 @@ def cmd_place_multi(args):
     if ranked:
         emit({"type": "ranking", "order": [c["seed"] for c in ranked],
               "best_seed": ranked[0]["seed"]})
+
+    # Auto-route the top finalists (gold-label routability). Slow + needs Java;
+    # any failure degrades to the proxy ranking already emitted above.
+    route_topk = int(os.environ.get("ROUTE_TOPK", "2"))
+    routed = {}
+    if ranked and route_topk > 0:
+        jar = os.environ.get("FREEROUTING_JAR", DEFAULT_JAR)
+        passes = int(os.environ.get("ROUTE_PASSES", "10"))
+        sides = int(os.environ.get("SIDES", "2"))
+        for c in ranked[:route_topk]:
+            seed = c["seed"]
+            emit({"type": "progress", "stage": "route", "percent": 0.0})
+            try:
+                pct = _route_candidate(model, pcb, in_path, fab, seed, jar,
+                                       passes, sides, strategy, connectors)
+                routed[seed] = pct
+                emit({"type": "route-result", "seed": seed,
+                      "routed_pct": round(pct, 1)})
+            except Exception as exc:
+                emit({"type": "route-skipped", "seed": seed, "reason": str(exc)})
+        if routed:
+            final = ranking.final_order(buf, routed)
+            emit({"type": "ranking", "order": [c["seed"] for c in final],
+                  "best_seed": final[0]["seed"]})
+
     emit({"type": "done", "count": count})
     return 0
 
