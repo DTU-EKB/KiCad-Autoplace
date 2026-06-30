@@ -45,5 +45,6 @@ def run_candidates(model: Board, count: int, *, strategy: str = "auto",
             "sheet_spread_score": metrics.sheet_spread_score(board),
             "pinch_fraction": metrics.pinch_fraction(board, margin, track),
             "whitespace_connectivity": metrics.whitespace_connectivity(board),
+            "decap_proximity": metrics.decap_proximity(board),
             "board": serialize.board_to_dict(board),
         }

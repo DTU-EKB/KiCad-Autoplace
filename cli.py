@@ -141,7 +141,7 @@ def cmd_place_multi(args):
     connectors = _read_connectors(in_path)
     buf = []
     keys = ("seed", "overlaps", "sheet_spread_score", "pinch_fraction",
-            "whitespace_connectivity", "hpwl_mm")
+            "whitespace_connectivity", "decap_proximity", "hpwl_mm")
     for i, cand in enumerate(multiseed.run_candidates(
             model, count, strategy=strategy, connectors=connectors,
             margin=fabrication.margin_for(fab), track=fabrication.track_for(fab))):
