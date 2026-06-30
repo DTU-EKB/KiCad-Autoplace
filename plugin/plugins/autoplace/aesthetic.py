@@ -16,6 +16,31 @@ def _snap(v: float, grid: float) -> float:
     return round(v / grid) * grid
 
 
+def _clusters(parts, axis: str, tol: float) -> list:
+    """Greedy 1-D clusters of components along ``axis`` ('x'|'y').
+
+    ``parts`` must already be sorted by coord (ties by ref).  A part joins the
+    running cluster while ``|coord - running_mean| <= tol``; otherwise it starts
+    a new cluster.  Returns a list of lists (clusters of any size).
+    """
+    if not parts:
+        return []
+    clusters: list[list] = []
+    current = [parts[0]]
+    running_mean = getattr(parts[0], axis)
+    for c in parts[1:]:
+        coord = getattr(c, axis)
+        if abs(coord - running_mean) <= tol:
+            current.append(c)
+            running_mean = sum(getattr(p, axis) for p in current) / len(current)
+        else:
+            clusters.append(current)
+            current = [c]
+            running_mean = coord
+    clusters.append(current)
+    return clusters
+
+
 def _try_move(board: Board, c, axis: str, target: float, margin: float) -> bool:
     """Attempt to set c.axis = target.
 
@@ -76,20 +101,7 @@ def align(board: Board, *, grid: float = 0.5, margin: float = 0.8,
             # 3b. Greedy clustering on the sorted axis coordinates.
             if not parts:
                 continue
-            clusters: list[list] = []
-            current = [parts[0]]
-            running_mean = getattr(parts[0], axis)
-            for c in parts[1:]:
-                coord = getattr(c, axis)
-                if abs(coord - running_mean) <= tol:
-                    current.append(c)
-                    # Update running mean.
-                    running_mean = sum(getattr(p, axis) for p in current) / len(current)
-                else:
-                    clusters.append(current)
-                    current = [c]
-                    running_mean = coord
-            clusters.append(current)
+            clusters = _clusters(parts, axis, tol)
 
             # 3c. For each cluster of >= 2 parts, attempt to snap each to the target.
             for cluster in clusters:
