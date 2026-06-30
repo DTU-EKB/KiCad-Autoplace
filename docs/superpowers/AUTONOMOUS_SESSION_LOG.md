@@ -51,3 +51,17 @@
     boards, never chase ±1-2 net "wins".
   - Feature net effect vs main baseline (aesthetic OFF 97.8%): ON 98.9% + every corpus board
     much tidier (system alignment .44->.08) + 0 overlaps + OVN +13pt. DECISION: MERGE.
+
+- Engine scout (read-only analysis -> docs/superpowers/ENGINE_OPTIMIZATION_OPPORTUNITIES.md):
+  ranked 8 algorithmic opportunities. Top "likely-wins": (1) probabilistic swap acceptance
+  (swaps accepted greedily at T=0 while nudge/rotate use Metropolis), (2) connectivity-biased
+  floorplan seeding. Coin-flips: density-adaptive nudge, adaptive centroid resync, mid-anneal
+  decap re-pair, FD early repulsion, restart-from-best. Long-shot: legalize-preserving push_apart.
+
+- Wave 2 (SA effort) — STRONG SIGNAL (system, clean run): routed-% vs sa_steps:
+    0.5x (22500) 89.4% | 1.0x (45000=current cap) 95.5% | 2.0x (90000) 98.3%.
+  Monotonic, +5-11 nets per doubling (>> ±3 noise). The engine is SEARCH-LIMITED: the 45000
+  cap in engine.py (`min(45000, n_free*700)`) starves large boards. -> raise the cap. Confirming
+  on motor_power + measuring placement-time cost before setting the value. [in progress]
+  - Wave 3 queued: probabilistic-swap experiment committed on branch sa-probabilistic-swap
+    (16fb237), to gate after the SA cap lands (so it's tested on the final operating point).
