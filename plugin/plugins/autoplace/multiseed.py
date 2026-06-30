@@ -18,7 +18,8 @@ from .model import Board
 
 def run_candidates(model: Board, count: int, *, strategy: str = "auto",
                    connectors: list[str] | None = None,
-                   margin: float = 0.8, track: float = 1.0) -> Iterator[dict]:
+                   margin: float = 0.8, track: float = 1.0,
+                   aesthetic: bool = True) -> Iterator[dict]:
     """Yield one candidate dict for each seed in ``0..count-1``.
 
     Each seed places a fresh deep copy of ``model`` (``engine.place`` mutates
@@ -30,7 +31,8 @@ def run_candidates(model: Board, count: int, *, strategy: str = "auto",
         board = copy.deepcopy(model)
         try:
             report = engine.place(board, seed=seed, strategy=strategy,
-                                  connectors=connectors, margin=margin, track=track)
+                                  connectors=connectors, margin=margin, track=track,
+                                  aesthetic=aesthetic)
         except Exception as exc:                      # one bad seed must not kill the gallery
             yield {"type": "candidate-error", "seed": seed, "error": str(exc)}
             continue
