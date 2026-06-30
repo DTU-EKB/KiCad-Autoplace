@@ -43,10 +43,12 @@ def test_count_and_shape():
     for c in cands:
         assert set(c) >= {"seed", "hpwl_mm", "crossings", "overlaps",
                           "hpwl_delta_pct", "sheet_spread_score",
-                          "pinch_fraction", "whitespace_connectivity", "board"}
+                          "pinch_fraction", "whitespace_connectivity",
+                          "decap_proximity", "board"}
         assert isinstance(c["sheet_spread_score"], float)
         assert isinstance(c["pinch_fraction"], float)
         assert isinstance(c["whitespace_connectivity"], float)
+        assert isinstance(c["decap_proximity"], float)
         assert c["board"]["footprints"]
 
 

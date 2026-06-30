@@ -51,3 +51,15 @@ def test_final_order_no_routes_is_pre_rank():
     a = _c(1, hpwl=100.0)
     b = _c(2, hpwl=50.0)
     assert [x["seed"] for x in ranking.final_order([a, b], {})] == [2, 1]
+
+
+def test_closer_decaps_outrank_equal_candidate():
+    a = _c(1, hpwl=100.0); a["decap_proximity"] = 12.0
+    b = _c(2, hpwl=100.0); b["decap_proximity"] = 3.0     # tighter decaps
+    assert [x["seed"] for x in ranking.pre_rank([a, b])] == [2, 1]
+
+
+def test_decap_absent_does_not_change_ranking():
+    a = _c(1, hpwl=100.0)        # no decap_proximity key
+    b = _c(2, hpwl=50.0)         # no decap_proximity key
+    assert [x["seed"] for x in ranking.pre_rank([a, b])] == [2, 1]

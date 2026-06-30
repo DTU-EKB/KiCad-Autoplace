@@ -20,6 +20,7 @@ def candidate_key(cand: dict) -> tuple:
         cand["overlaps"],                          # legal layouts win outright
         round(cand["sheet_spread_score"], 3),      # clean per-sheet spread
         round(cand["pinch_fraction"], 3),          # fewer routing pinch points
+        round(cand.get("decap_proximity", 0.0) * 2) / 2,  # decap closeness, 0.5mm buckets
         round(cand["hpwl_mm"], 2),                 # wirelength is the final metric
         cand["seed"],                              # total order
     )

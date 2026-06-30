@@ -424,6 +424,7 @@ function addCandidateCard(cand) {
   const spread = cand.sheet_spread_score === undefined ? "—" : cand.sheet_spread_score.toFixed(2);
   const pinch = cand.pinch_fraction === undefined ? "—" : `${Math.round(cand.pinch_fraction * 100)}%`;
   const ws = cand.whitespace_connectivity === undefined ? "—" : `${Math.round(cand.whitespace_connectivity * 100)}%`;
+  const decap = cand.decap_proximity === undefined ? "—" : `${cand.decap_proximity.toFixed(1)}mm`;
   card.innerHTML =
     `<div class="cand-thumb"><svg viewBox="0 0 ${W.toFixed(1)} ${H.toFixed(1)}">${inner}</svg></div>` +
     `<div class="cand-meta">` +
@@ -432,7 +433,7 @@ function addCandidateCard(cand) {
     `</div>` +
     `<div class="cand-metrics">` +
     `<div class="cand-metrics-row">${fmt(Math.round(cand.hpwl_mm))} mm ${delta} · ${fmt(cand.crossings)} crossings</div>` +
-    `<div class="cand-metrics-row cand-metrics-proxy">spread ${spread} · pinch ${pinch} · ws ${ws} · overlaps ${fmt(cand.overlaps)}</div>` +
+    `<div class="cand-metrics-row cand-metrics-proxy">spread ${spread} · pinch ${pinch} · ws ${ws} · decap ${decap} · overlaps ${fmt(cand.overlaps)}</div>` +
     `</div>`;
   card.addEventListener("click", () => commitSeed(cand.seed));
   grid.appendChild(card);
