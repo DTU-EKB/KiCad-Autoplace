@@ -147,3 +147,18 @@
 
 **Engine is in strong shape; placement-quality headroom on this corpus is now exhausted.** Further
 gated experiments on this corpus would mostly measure noise. Winding down active grinding.
+
+## Loop termination (fallback wakeup fired post-consolidation)
+The self-scheduled fallback loop fired again after consolidation. All roadmap waves (1-6) are
+complete; main unchanged at a5eefc5 (18 ahead of origin, not pushed). TERMINATING the autonomous
+loop — NOT scheduling another wakeup — for a principled reason, not exhaustion:
+- The corpus has NO MEASUREMENT HEADROOM left. `system` is near-ceiling (~98%), every other board is
+  routing-ceiling-limited (human == ours), and they're 2-layer designs (can't validly gate
+  single-sided). So a genuinely good engine change CANNOT produce a detectable gated win here.
+- Per the loop's own rule ("keep going as long as you can find gated wins"), the condition is
+  unsatisfiable -> stop. Continuing would burn compute measuring ±3-net FreeRouting noise.
+- To make further progress the engine needs INPUTS I don't have unattended: boards with routing
+  headroom (denser/harder, or single-sided-DESIGNED for the laser workflow), or a user decision on
+  app-side items (gallery preview/final split). Left for the user to direct on return.
+Net result of the session: 2 gated wins merged to local main (SA cap 90k, aesthetic alignment),
+engine validated at human placement parity + beats raw import (OVN +13pt), all experiments logged.
