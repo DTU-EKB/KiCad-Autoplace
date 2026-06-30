@@ -99,7 +99,7 @@ def cmd_place_multi(args):
     as a gallery; picking one re-runs ``place`` with that seed (deterministic, so
     the saved board matches the previewed thumbnail).
     """
-    from autoplace import fabrication, multiseed
+    from autoplace import fabrication, multiseed, ranking
     in_path = args[0]
     count = int(args[1]) if len(args) > 1 else 6
 
@@ -112,6 +112,9 @@ def cmd_place_multi(args):
     emit({"type": "progress", "stage": "load", "percent": 0.0})
     model, _ = kicad_io.load_board(in_path)
     connectors = _read_connectors(in_path)
+    buf = []
+    keys = ("seed", "overlaps", "sheet_spread_score", "pinch_fraction",
+            "whitespace_connectivity", "hpwl_mm")
     for i, cand in enumerate(multiseed.run_candidates(
             model, count, strategy=strategy, connectors=connectors,
             margin=fabrication.margin_for(fab), track=fabrication.track_for(fab))):
@@ -120,6 +123,13 @@ def cmd_place_multi(args):
         emit({"type": "progress", "stage": "place",
               "percent": round(100.0 * (i + 1) / count, 1)})
         emit(cand)
+        if cand.get("type") == "candidate":
+            buf.append({k: cand[k] for k in keys})     # lightweight: no board geometry
+
+    ranked = ranking.pre_rank(buf)
+    if ranked:
+        emit({"type": "ranking", "order": [c["seed"] for c in ranked],
+              "best_seed": ranked[0]["seed"]})
     emit({"type": "done", "count": count})
     return 0
 
