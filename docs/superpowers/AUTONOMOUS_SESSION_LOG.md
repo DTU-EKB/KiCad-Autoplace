@@ -72,4 +72,17 @@
 - Wave 3 (probabilistic swap, branch sa-probabilistic-swap 16fb237): swaps were accepted greedily
   (T=0) while nudge/rotate use Metropolis. Hypothesis: most interesting for motor_power, STUCK at
   66.1% regardless of SA effort (a basin only a non-local escape move can leave). Gating multi-seed
-  (system + motor_power, seeds 0/1/2) on top of the raised cap. [in progress]
+  (system + motor_power, seeds 0/1/2) on top of the raised cap.
+  - RESULT: NEUTRAL. motor_power mean 65.8% (swap) == 65.8% (main); system 98.9% (swap) vs 98.3%
+    (main) = +1 net, within noise. Hypothesis NOT supported: motor_power is density-capped, not
+    basin-trapped. DECISION: SKIP (do not merge); branch sa-probabilistic-swap PARKED (clean
+    correctness change; revisit if a headroom board later shows benefit).
+
+- KEY STRATEGIC FINDING: the two gate boards are now at their limits — system ~98.3-98.9%
+  (near ceiling, ~2-3 unroutable nets), motor_power ~65.8% (density-capped, flat to SA effort
+  and swap policy). Neither can SHOW further engine improvement. To detect future wins I must
+  gate on corpus boards that have routing HEADROOM.
+
+- Wave 4 (corpus headroom baseline): route all 12 canonical corpus boards at seed 0 on current
+  main (cap=90000) to find which have headroom (<~90%) so later experiments are measured where
+  signal is visible. [in progress]
