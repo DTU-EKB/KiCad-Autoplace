@@ -326,3 +326,28 @@ def test_decap_penalty_zero_without_pairs():
     a = anneal.Annealer(b, margin=0.8, seed=0)
     assert a.decap == {}
     assert a._decap_penalty(b.components["R1"]) == 0.0
+
+
+def test_tall_part_widens_channel_halo():
+    from autoplace import anneal
+    b = Board(0, 0, 80, 80)
+    tall = Component("U1", 4, 4, x=20, y=20, height=18.0)
+    short = Component("R1", 4, 4, x=27.5, y=20, height=3.0)   # gx = 3.5
+    b.components = {"U1": tall, "R1": short}
+    ann = anneal.Annealer(b, margin=0.8, seed=0, channel_scale=1.0)
+    with_tall = ann._pair_penalty(tall, short, 0.8)           # 3.5 < channel 2.6 + halo 2.0
+    tall.height = 3.0                                          # now both short
+    both_short = ann._pair_penalty(tall, short, 0.8)          # 3.5 not < channel 2.6
+    assert with_tall > 0
+    assert both_short == 0
+    assert with_tall > both_short
+
+
+def test_tall_halo_inert_on_dense_board():
+    from autoplace import anneal
+    b = Board(0, 0, 80, 80)
+    tall = Component("U1", 4, 4, x=20, y=20, height=18.0)
+    short = Component("R1", 4, 4, x=27.5, y=20, height=3.0)
+    b.components = {"U1": tall, "R1": short}
+    ann = anneal.Annealer(b, margin=0.8, seed=0, channel_scale=0.0)   # dense -> channel off
+    assert ann._pair_penalty(tall, short, 0.8) == 0
