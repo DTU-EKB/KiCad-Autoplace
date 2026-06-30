@@ -293,7 +293,7 @@ def alignment_score(board: Board, tol: float | None = None) -> float:
     Lower is better; 0.0 when no block has >=2 parts within tol on an axis.
     Same grouping/clustering as aesthetic.align, so metric and term stay in lockstep.
     """
-    from .aesthetic import ALIGN_TOL_MM
+    from .aesthetic import ALIGN_TOL_MM, _clusters
     if tol is None:
         tol = ALIGN_TOL_MM
 
@@ -314,20 +314,7 @@ def alignment_score(board: Board, tol: float | None = None) -> float:
             parts = sorted(group, key=lambda c: (getattr(c, axis), c.ref))
             if not parts:
                 continue
-            # Greedy clustering (identical to aesthetic.align).
-            clusters: list[list] = []
-            current = [parts[0]]
-            running_mean = getattr(parts[0], axis)
-            for c in parts[1:]:
-                coord = getattr(c, axis)
-                if abs(coord - running_mean) <= tol:
-                    current.append(c)
-                    running_mean = sum(getattr(p, axis) for p in current) / len(current)
-                else:
-                    clusters.append(current)
-                    current = [c]
-                    running_mean = coord
-            clusters.append(current)
+            clusters = _clusters(parts, axis, tol)
 
             for cluster in clusters:
                 if len(cluster) < 2:
