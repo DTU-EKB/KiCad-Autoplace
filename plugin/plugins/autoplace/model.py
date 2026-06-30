@@ -40,6 +40,7 @@ class Component:
     edge: str = ""                 # "" free; "L"/"R"/"T"/"B" pinned to that edge
     value: str = ""                # fp.GetValue(): "100n", "4700u/50V", "1N4148", ...
     fpid: str = ""                 # fp.GetFPIDAsString(): footprint class, e.g. "Capacitor_THT:C_Disc..."
+    height: float = 4.0            # nominal THT body height (mm) from footprints.height_mm(fpid); low default
 
     def pad_world(self, pad: Pad) -> tuple[float, float]:
         # Matches pcbnew Rotate(centre, +deg): (x, y) -> (y, -x) per 90 deg.
