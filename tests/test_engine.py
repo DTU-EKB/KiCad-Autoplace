@@ -252,3 +252,32 @@ def test_dense_board_zeroes_the_gutter():
     # channel_scale 0 (dense board): the channel term is off entirely -> no gutter
     ann = anneal.Annealer(b, margin=0.8, seed=0, channel_scale=0.0)
     assert ann._pair_penalty(a, bb, 0.8) == 0
+
+
+def test_gutter_boundary_moves_with_channel_scale():
+    # The cross-block gutter target = channel_mm + gutter*channel_scale must actually
+    # scale with channel_scale (not just collapse via the channel-off short-circuit).
+    # margin 0.8, track 1.0 -> channel_mm 2.6, gutter 1.8.
+    # Derivation:
+    #   A=(4x4 at x=20), B=(4x4), eff_w both 4 -> half-widths sum 4.
+    #   gx = |xB - 20| - 4;  gy = |20-20| - 4 = -4.
+    #   shadow = min(gx, gy) < 0.8 -> -4 < 0.8 -> True.
+    #   gap = max(gx, gy) = gx (since gy=-4).
+    #   channel = 4.0 * channel_scale > 0 (channel ON for scale 0.5 and 1.0).
+    #   Different blocks (X vs Y) -> target = 2.6 + 1.8 * channel_scale.
+    #
+    #   scale=0.5, target=3.5, xB=27.0 -> gx=3.0: 0<=3.0<3.5 -> penalty > 0 (assert 1)
+    #   scale=0.5, target=3.5, xB=28.0 -> gx=4.0: 4.0>=3.5  -> penalty == 0 (assert 2)
+    #   scale=1.0, target=4.4, xB=28.0 -> gx=4.0: 0<=4.0<4.4 -> penalty > 0 (assert 3)
+    from autoplace import anneal
+    b = Board(0, 0, 80, 80)
+    a = Component("A", 4, 4, x=20, y=20, block="X")
+    bb = Component("B", 4, 4, x=27.0, y=20, block="Y")   # gx = 7.0 - 4 = 3.0
+    b.components = {"A": a, "B": bb}
+    half = anneal.Annealer(b, margin=0.8, seed=0, channel_scale=0.5)  # target 3.5
+    assert half._pair_penalty(a, bb, 0.8) > 0             # gx 3.0 < 3.5 -> penalised
+
+    bb.x = 28.0                                            # gx = 8.0 - 4 = 4.0
+    assert half._pair_penalty(a, bb, 0.8) == 0            # 4.0 >= 3.5 -> no penalty at scale 0.5
+    full = anneal.Annealer(b, margin=0.8, seed=0, channel_scale=1.0)  # target 4.4
+    assert full._pair_penalty(a, bb, 0.8) > 0             # SAME pair penalised -> boundary moved
