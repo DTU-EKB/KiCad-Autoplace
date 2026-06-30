@@ -20,6 +20,8 @@ class Pad:
     net: str          # "" when unconnected
     ox: float         # offset from component centre (mm), current orientation
     oy: float
+    pin_type: str = ""       # schematic electrical type (power_in/power_out/input/output/passive/no_connect/...); "" = unknown
+    pin_function: str = ""    # schematic pin name (VDD, SW, GATE, ...); "" = none
 
 
 @dataclass
@@ -36,6 +38,8 @@ class Component:
     sheet: str = ""                # hierarchical schematic sheet path
     block: str = ""
     edge: str = ""                 # "" free; "L"/"R"/"T"/"B" pinned to that edge
+    value: str = ""                # fp.GetValue(): "100n", "4700u/50V", "1N4148", ...
+    fpid: str = ""                 # fp.GetFPIDAsString(): footprint class, e.g. "Capacitor_THT:C_Disc..."
 
     def pad_world(self, pad: Pad) -> tuple[float, float]:
         # Matches pcbnew Rotate(centre, +deg): (x, y) -> (y, -x) per 90 deg.

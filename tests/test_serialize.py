@@ -11,7 +11,9 @@ def test_board_to_dict_shape():
     b = Board(0, 0, 50, 40)
     b.components = {
         "J1": Component("J1", 4, 4, x=10, y=20, is_connector=True, block="b0",
-                        pads=[Pad("1", "SIG", 1.0, 0.0)]),
+                        value="CONN_2x1", fpid="Connector:PinHeader_2x1",
+                        pads=[Pad("1", "SIG", 1.0, 0.0,
+                                  pin_type="input", pin_function="RX")]),
     }
     d = serialize.board_to_dict(b)
     assert d["outline"] == {"x0": 0, "y0": 0, "x1": 50, "y1": 40}
@@ -20,7 +22,10 @@ def test_board_to_dict_shape():
     assert fp["ref"] == "J1"
     assert fp["is_connector_guess"] is True
     assert fp["block"] == "b0"
-    assert fp["pads"] == [{"net": "SIG", "ox": 1.0, "oy": 0.0}]
+    assert fp["value"] == "CONN_2x1"
+    assert fp["fpid"] == "Connector:PinHeader_2x1"
+    assert fp["pads"] == [{"net": "SIG", "ox": 1.0, "oy": 0.0,
+                           "pin_type": "input", "pin_function": "RX"}]
 
 
 def test_board_to_dict_uses_effective_dims_for_rotation():

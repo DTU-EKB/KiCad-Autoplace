@@ -21,9 +21,13 @@ def board_to_dict(board: Board) -> dict:
                 "block": c.block,
                 "sheet": c.sheet,
                 "edge": c.edge,
+                "value": c.value,
+                "fpid": c.fpid,
                 "is_connector_guess": c.is_connector,
                 "locked": c.locked,
-                "pads": [{"net": p.net, "ox": p.ox, "oy": p.oy} for p in c.pads],
+                "pads": [{"net": p.net, "ox": p.ox, "oy": p.oy,
+                          "pin_type": p.pin_type, "pin_function": p.pin_function}
+                         for p in c.pads],
             }
             for c in board.components.values()
         ],
