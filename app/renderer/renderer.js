@@ -421,6 +421,9 @@ function addCandidateCard(cand) {
       ? ""
       : `<span class="cand-delta ${cand.hpwl_delta_pct < 0 ? "delta-good" : "delta-bad"}">` +
         `${cand.hpwl_delta_pct > 0 ? "+" : ""}${cand.hpwl_delta_pct}%</span>`;
+  const spread = cand.sheet_spread_score === undefined ? "—" : cand.sheet_spread_score.toFixed(2);
+  const pinch = cand.pinch_fraction === undefined ? "—" : `${Math.round(cand.pinch_fraction * 100)}%`;
+  const ws = cand.whitespace_connectivity === undefined ? "—" : `${Math.round(cand.whitespace_connectivity * 100)}%`;
   card.innerHTML =
     `<div class="cand-thumb"><svg viewBox="0 0 ${W.toFixed(1)} ${H.toFixed(1)}">${inner}</svg></div>` +
     `<div class="cand-meta">` +
@@ -428,7 +431,9 @@ function addCandidateCard(cand) {
     `<span class="badge badge-success cand-badge" hidden>best</span>` +
     `</div>` +
     `<div class="cand-metrics">` +
-    `${fmt(Math.round(cand.hpwl_mm))} mm ${delta} · ${fmt(cand.crossings)} crossings</div>`;
+    `<div class="cand-metrics-row">${fmt(Math.round(cand.hpwl_mm))} mm ${delta} · ${fmt(cand.crossings)} crossings</div>` +
+    `<div class="cand-metrics-row cand-metrics-proxy">spread ${spread} · pinch ${pinch} · ws ${ws} · overlaps ${fmt(cand.overlaps)}</div>` +
+    `</div>`;
   card.addEventListener("click", () => commitSeed(cand.seed));
   grid.appendChild(card);
   markBestCandidate();
