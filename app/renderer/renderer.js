@@ -465,6 +465,34 @@ function markBestCandidate() {
   }
 }
 
+function applyRanking(order, bestSeed) {
+  const grid = $("galleryGrid");
+  order.forEach((seed) => {
+    const card = grid.querySelector(`.cand[data-seed="${seed}"]`);
+    if (card) grid.appendChild(card);                 // reorder: re-append in rank order
+  });
+  grid.querySelectorAll(".cand-badge").forEach((b) => (b.hidden = true));
+  grid.querySelectorAll(".cand").forEach((c) => c.classList.remove("cand-recommended"));
+  const best = grid.querySelector(`.cand[data-seed="${bestSeed}"]`);
+  if (best) {
+    const badge = best.querySelector(".cand-badge");
+    if (badge) { badge.hidden = false; badge.textContent = "recommended"; }
+    best.classList.add("cand-recommended");           // highlight (does NOT auto-commit)
+  }
+}
+
+function applyRouteResult(seed, pct) {
+  const card = $("galleryGrid").querySelector(`.cand[data-seed="${seed}"]`);
+  if (!card) return;
+  let chip = card.querySelector(".cand-routed");
+  if (!chip) {
+    chip = document.createElement("span");
+    chip.className = "cand-routed";
+    card.querySelector(".cand-meta").appendChild(chip);
+  }
+  chip.textContent = `routed ${pct}%`;
+}
+
 // ---- Run Flow ----
 async function run() {
   if (state.running) return;
@@ -725,6 +753,9 @@ window.api.onPlaceEvent((evt) => {
   if (evt.type === "progress") setProgress(evt.stage, evt.percent);
   else if (evt.type === "candidate") addCandidateCard(evt);
   else if (evt.type === "candidate-error") addCandidateError(evt);
+  else if (evt.type === "ranking") applyRanking(evt.order, evt.best_seed);
+  else if (evt.type === "route-result") applyRouteResult(evt.seed, evt.routed_pct);
+  else if (evt.type === "route-skipped") { /* keep proxy ranking; no chip */ }
   else if (evt.type === "iteration") {
     const budget = evt.budget || 1;
     setProgress("refine", Math.round((evt.iter / budget) * 100));
