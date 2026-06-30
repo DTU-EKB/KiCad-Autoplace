@@ -1,7 +1,7 @@
 """Top-level placement engine.
 
-Pipeline: detect blocks -> seed -> force-directed global -> SA refine -> legalize.
-(Rotation moves remain the last open M4 item; this pass is translation + swap.)
+Pipeline: detect blocks -> seed -> force-directed global -> SA refine
+(translation, rotation, and swap moves) -> legalize.
 
 ``place`` mutates the board in place and returns a report dict comparing the
 before/after metrics -- the numbers that go into ``run.json`` and the HTML
