@@ -136,7 +136,9 @@ class Annealer:
         if t is None:
             return 0.0
         cap_idx, ic_ref, ic_idx = t
-        ic = self.board.components[ic_ref]
+        ic = self.board.components.get(ic_ref)
+        if ic is None:                      # paired IC vanished (defensive; can't happen in-anneal)
+            return 0.0
         cx, cy = c.pad_world(c.pads[cap_idx])
         ix, iy = ic.pad_world(ic.pads[ic_idx])
         return max(0.0, math.hypot(ix - cx, iy - cy) - DECAP_TARGET_MM)
