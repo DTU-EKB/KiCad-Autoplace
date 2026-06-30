@@ -36,7 +36,11 @@ class _Weights:
     COHESION = 0.35       # component distance to its block centroid
     CHANNEL = 4.0         # soft penalty for gaps narrower than a routing channel
     CONG_K = 3.0          # per-unit-pressure multiplier on the channel term
-    DECAP = 1.5           # pull a decoupling cap toward its IC power pin (search bias)
+    DECAP = 3.0           # pull a decoupling cap toward its IC power pin (search bias).
+    # 3.0 chosen by a weight sweep gated on FreeRouting: it roughly halves mean decap
+    # proximity vs 1.5 on the decap-bearing boards (system 22->15mm, current_sense
+    # 15->7mm) and is the peak for the system integration board -- above 3.0 the global
+    # layout distorts and system proximity worsens again. Search bias only; never _quality.
 
 
 # Target gap (mm) a decoupling cap should sit within of its IC power pin (loop
