@@ -25,7 +25,7 @@ import math
 from . import geom
 from .blocks import block_centroids
 from .edge import pin_to_edge
-from .metrics import _is_power
+from .metrics import _is_power, channel_width
 from .model import Board
 
 
@@ -38,19 +38,24 @@ class _Weights:
     CONG_K = 3.0          # per-unit-pressure multiplier on the channel term
 
 
-# Desired clear gap between courtyards so the router has a channel (mm).
-CHANNEL_MM = 2.6          # 1.0 mm track + 2 x 0.8 mm clearance (DTU fiber-laser DR)
+# Extra cross-block gutter beyond the single-track channel = one more routing
+# track (track + clearance), scaled by channel_scale so dense boards relax it.
+# The base channel and the gutter are both derived per-board from the fab
+# profile in Annealer.__init__ (channel = track + 2*clearance).
 
 
 class Annealer:
     def __init__(self, board: Board, *, margin: float = 0.8, seed: int = 0,
                  channel_scale: float = 1.0, cohesion_scale: float = 1.0,
-                 congestion=None):
+                 track: float = 1.0, congestion=None):
         import random
         self.board = board
         self.margin = margin
         self.channel = _Weights.CHANNEL * channel_scale
         self.cohesion = _Weights.COHESION * cohesion_scale
+        self.channel_scale = channel_scale
+        self.channel_mm = channel_width(self.margin, track)   # base 1-track channel
+        self.gutter = track + self.margin                     # one extra cross-block track
         # per-component channel multiplier from the previous routing's congestion
         # (sampled once at the component's start position; fixed for this pass)
         self.cpress = {}
@@ -93,14 +98,19 @@ class Annealer:
         cost = 0.0
         if ox > 0 and oy > 0:                          # boxes overlap
             cost += _Weights.OVERLAP * ox * oy
-        # channel: penalise when the nearer-axis gap is below CHANNEL_MM and the
-        # boxes shadow each other on the other axis (a real routing pinch point)
+        # channel: penalise when the nearer-axis gap is below the channel target
+        # and the boxes shadow each other on the other axis (a real routing pinch).
+        # Parts in different blocks target a wider gutter (scaled by channel_scale,
+        # so a dense board where channel_scale -> 0 keeps the plain channel).
         gap = max(gx, gy)
         shadow = min(gx, gy) < margin
-        if self.channel and shadow and 0 <= gap < CHANNEL_MM:
+        target = self.channel_mm
+        if a.block and b.block and a.block != b.block:
+            target += self.gutter * self.channel_scale
+        if self.channel and shadow and 0 <= gap < target:
             press = self.cpress.get(a.ref, 0.0) + self.cpress.get(b.ref, 0.0)
             local = self.channel * (1.0 + _Weights.CONG_K * press / 2.0)
-            cost += local * (CHANNEL_MM - gap)
+            cost += local * (target - gap)
         return cost
 
     def _edge_dist(self, c) -> float:
@@ -278,8 +288,8 @@ class Annealer:
 
 def anneal(board: Board, *, seed: int = 0, steps: int = 6000, margin: float = 0.8,
            channel_scale: float = 1.0, cohesion_scale: float = 1.0,
-           congestion=None, progress=None):
+           track: float = 1.0, congestion=None, progress=None):
     Annealer(board, margin=margin, seed=seed, channel_scale=channel_scale,
-             cohesion_scale=cohesion_scale, congestion=congestion).run(
+             cohesion_scale=cohesion_scale, track=track, congestion=congestion).run(
                  steps=steps, progress=progress)
     return board

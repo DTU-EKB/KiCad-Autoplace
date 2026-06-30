@@ -73,7 +73,7 @@ def cmd_place(args):
     connectors = _read_connectors(in_path)
     report = engine.place(model, seed=seed, strategy=strategy,
                           connectors=connectors, margin=fabrication.margin_for(fab),
-                          progress=progress)
+                          track=fabrication.track_for(fab), progress=progress)
     kicad_io.apply_placement(model, pcb, out_path)
     # carry the project file so net-class (track/clearance) rules survive: the
     # router reads widths from <stem>.kicad_pro, not the .kicad_pcb.

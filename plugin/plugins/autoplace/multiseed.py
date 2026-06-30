@@ -30,7 +30,7 @@ def run_candidates(model: Board, count: int, *, strategy: str = "auto",
         board = copy.deepcopy(model)
         try:
             report = engine.place(board, seed=seed, strategy=strategy,
-                                  connectors=connectors, margin=margin)
+                                  connectors=connectors, margin=margin, track=track)
         except Exception as exc:                      # one bad seed must not kill the gallery
             yield {"type": "candidate-error", "seed": seed, "error": str(exc)}
             continue
