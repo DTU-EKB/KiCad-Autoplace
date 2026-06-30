@@ -106,8 +106,44 @@
   search-limited (consistent with corpus). NO regression; session wins carry through on the
   external board. The engine is at human parity (corpus) + beats raw import (OVN) + tidier.
 
-- Wave 6 (aesthetic v2 — even-spacing): with placement at human parity + most boards
-  routing-ceiling-limited, the remaining on-theme value is VISIBLE polish. Add even-spacing of
-  parts within an aligned group (extend aesthetic.py), legality-preserving (overlap+bounds guard,
-  bounded moves), gated for routing NON-REGRESSION (watch system, the only near-ceiling board) +
-  tidiness improvement + 0 overlaps. Aesthetic feature (not a routing feature). [in progress]
+- Wave 6 (aesthetic v2 — even-spacing): implemented `aesthetic.space_evenly` + `metrics.
+  spacing_unevenness`, 133 tests green, 0 overlaps. BUT small effect (only 9 parts moved on system,
+  0-2 elsewhere — v1 already tidied most rows) and routing 98.3 -> 97.8% on system (-1 net, within
+  noise but wrong direction; gives back ~1 net of the SA-cap win for marginal tidiness).
+  DECISION: SKIP (branch aesthetic-v2-spacing PARKED, correct+tested, revivable). A new feature must
+  CLEARLY beat its bar; alignment v1 did (dramatic tidiness + routing gain), even-spacing did not.
+
+---
+
+## FINAL SUMMARY (autonomous session 2026-06-30)
+
+**Two real wins merged to LOCAL main (NOT pushed — review + push when ready):**
+1. **Aesthetic alignment post-pass** (`aesthetic.align`, default ON): snaps near-collinear parts
+   to shared axes, legality-preserving. Every corpus board markedly tidier (system alignment
+   .44->.08), 0 overlaps, routing non-regress-to-positive (system 97.8->98.9%), OVN +13pt.
+2. **SA step cap 45000 -> 90000** (`engine.py`): the engine was SEARCH-LIMITED on large boards;
+   system routed 95.5 -> 98.3% (+5 nets). Only binds >64-free-part boards (small boards unaffected).
+
+**Tried and SKIPPED (neutral/marginal — branches parked, not deleted):**
+- Probabilistic swap acceptance (sa-probabilistic-swap): routing-neutral.
+- Aesthetic v2 even-spacing (aesthetic-v2-spacing): tiny tidiness gain, slight routing cost.
+
+**Key findings:**
+- The engine PLACES AT HUMAN PARITY across the corpus (re-routing human-import positions vs our
+  placement gives identical routed counts) and BEATS raw KiCad import on external boards (OVN
+  56.9->70.0%). Placement quality is at the expert-human ceiling for this corpus.
+- Most corpus boards route 59-81% with BOTH human and our placement -> a board/netclass routing
+  CEILING (CNC 1mm tracks, 2-sided), NOT a placement problem. Only `system` (large, hierarchical)
+  routes ~98%.
+- FreeRouting run-to-run noise is ~±3 nets on system -> never chase sub-3-net deltas.
+
+**Recommendations for the user (need your judgment / are app-side):**
+- Push local main to origin after reviewing the two merged wins.
+- (Optional) gallery speed on LARGE boards is ~2x slower from the SA cap; if that bothers you, a
+  fast-preview / high-quality-final split is a clean follow-up (changes the preview==saved contract).
+- (Optional) even-spacing branch is ready if you want the extra visual polish despite the ~1-net cost.
+- The 59-81% corpus routing ceiling is a ROUTING/fab-rules issue (not placement) — worth a look at
+  netclass widths vs board density if higher routed-% on the small boards matters.
+
+**Engine is in strong shape; placement-quality headroom on this corpus is now exhausted.** Further
+gated experiments on this corpus would mostly measure noise. Winding down active grinding.
