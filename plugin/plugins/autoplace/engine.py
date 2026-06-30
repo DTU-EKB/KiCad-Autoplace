@@ -11,7 +11,8 @@ from __future__ import annotations
 
 import random
 
-from . import (anneal, blocks, edge as edge_mod, floorplan as floorplan_mod, forcedirected,
+from . import (anneal, aesthetic as aesthetic_mod, blocks, edge as edge_mod,
+               floorplan as floorplan_mod, forcedirected,
                legalize as legal_mod, metrics)
 from .model import Board
 
@@ -19,7 +20,8 @@ from .model import Board
 def place(board: Board, *, seed: int = 0, grid: float = 0.5, margin: float = 0.8,
           track: float = 1.0, iters: int = 400, sa_steps: int | None = None,
           strategy: str = "auto", progress=None,
-          connectors: list[str] | None = None) -> dict:
+          connectors: list[str] | None = None,
+          aesthetic: bool = True) -> dict:
     """strategy: 'auto' (force-directed seed, floorplan only via cohesion),
     'floorplan' (force the region floorplan seed), 'compact' (force-directed).
 
@@ -88,6 +90,11 @@ def place(board: Board, *, seed: int = 0, grid: float = 0.5, margin: float = 0.8
     remaining = legal_mod.legalize(board, grid=grid, margin=margin)
     _report("legalize", 0.96)
 
+    aligned = 0
+    if aesthetic:
+        aligned = aesthetic_mod.align(board, grid=grid, margin=margin)
+    _report("aesthetic", 0.98)
+
     after = metrics.summary(board)
     _report("done", 1.0)
     return {
@@ -99,6 +106,7 @@ def place(board: Board, *, seed: int = 0, grid: float = 0.5, margin: float = 0.8
         "hpwl_delta_pct": _pct(before["hpwl_mm"], after["hpwl_mm"]),
         "crossings_delta": after["crossings"] - before["crossings"],
         "overlaps_remaining": len(remaining),
+        "aligned_parts": aligned,
         "seed": seed,
     }
 
