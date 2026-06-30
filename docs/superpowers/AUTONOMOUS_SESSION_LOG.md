@@ -91,6 +91,16 @@
   the small/flat boards (FORCE-DIRECTED path) route 59-81%. Hypothesis: the flat-board placement
   path is weak -> potentially the biggest lever. MUST first confirm vs HUMAN baseline (is our
   placement bad, or is it a board/netclass routing ceiling?).
-  - Wave 4b: human(original import positions) vs ours on the worst boards (feedback_circuit,
-    drive_circuit, c2000_feedback). If human >> ours -> our flat-board placement is the problem
-    (big opportunity). If human ~= ours -> board/netclass ceiling (no placement win there). [in progress]
+  - Wave 4b RESULT: human == ours EXACTLY on all 3 (feedback 59.1/59.1, drive 60.0/60.0,
+    c2000 61.7/61.7). Our placement MATCHES human -> the low absolute % is a board/netclass
+    routing CEILING (CNC 1mm tracks, 2-sided, these nets), NOT a placement deficiency. The
+    "flat-board path is weak" hypothesis is REFUTED. MAJOR POSITIVE FINDING: the engine already
+    places at human level across the corpus (and beats raw import: OVN +13pt). Limited further
+    placement-routability headroom on this corpus.
+  - Note: SA cap (90k) only binds boards with >64 free parts (n_free*700 > 45k) -> only large
+    boards (system, OVN) get slower-but-better placement; motor_power(58)+small boards unaffected.
+    Gallery-speed impact is limited to large boards; acceptable for the quality gain.
+
+- Wave 5 (validate cumulative wins on the external OVN board): re-run OVN human(import) vs ours
+  on current main (aesthetic + SA cap 90k). OVN has 77 free -> now 53900 steps (was 45000-capped),
+  so expect ours >= the prior 70%. [in progress]
