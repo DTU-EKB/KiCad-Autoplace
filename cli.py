@@ -92,10 +92,12 @@ def cmd_place(args):
     return 0
 
 
-def _route_candidate(model, pcb, in_path, fab, seed, jar, passes, sides,
+def _route_candidate(model, in_path, fab, seed, jar, passes, sides,
                      strategy, connectors):
     """Re-place ``seed`` (deterministic) and route it; return routed %.
 
+    Loads a fresh board from ``in_path`` on every call so each finalist starts
+    from a clean baseline and rotations never accumulate across calls.
     Writes scratch ``_placemulti_cand<seed>.*`` in the CWD (the app sets CWD to a
     writable userData dir). Net-class widths come from the copied .kicad_pro."""
     import copy
@@ -103,6 +105,7 @@ def _route_candidate(model, pcb, in_path, fab, seed, jar, passes, sides,
     import pcbnew
 
     from autoplace import engine, fabrication, kicad_io, routing
+    _, pcb = kicad_io.load_board(in_path)
     cand = copy.deepcopy(model)
     engine.place(cand, seed=seed, strategy=strategy, connectors=connectors,
                  margin=fabrication.margin_for(fab),
@@ -134,7 +137,7 @@ def cmd_place_multi(args):
     strategy = os.environ.get("STRATEGY", "auto")
     fab = _fab()
     emit({"type": "progress", "stage": "load", "percent": 0.0})
-    model, pcb = kicad_io.load_board(in_path)
+    model, _ = kicad_io.load_board(in_path)
     connectors = _read_connectors(in_path)
     buf = []
     keys = ("seed", "overlaps", "sheet_spread_score", "pinch_fraction",
@@ -167,7 +170,7 @@ def cmd_place_multi(args):
             seed = c["seed"]
             emit({"type": "progress", "stage": "route", "percent": 0.0})
             try:
-                pct = _route_candidate(model, pcb, in_path, fab, seed, jar,
+                pct = _route_candidate(model, in_path, fab, seed, jar,
                                        passes, sides, strategy, connectors)
                 routed[seed] = pct
                 emit({"type": "route-result", "seed": seed,
