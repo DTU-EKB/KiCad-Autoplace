@@ -61,7 +61,15 @@
 - Wave 2 (SA effort) — STRONG SIGNAL (system, clean run): routed-% vs sa_steps:
     0.5x (22500) 89.4% | 1.0x (45000=current cap) 95.5% | 2.0x (90000) 98.3%.
   Monotonic, +5-11 nets per doubling (>> ±3 noise). The engine is SEARCH-LIMITED: the 45000
-  cap in engine.py (`min(45000, n_free*700)`) starves large boards. -> raise the cap. Confirming
-  on motor_power + measuring placement-time cost before setting the value. [in progress]
-  - Wave 3 queued: probabilistic-swap experiment committed on branch sa-probabilistic-swap
-    (16fb237), to gate after the SA cap lands (so it's tested on the final operating point).
+  cap in engine.py (`min(45000, n_free*700)`) starves large boards. -> raise the cap.
+  - Confirmation: motor_power (free=58, default 40600 < cap; NOT cap-limited) flat 66.1% across
+    0.5/1/2x -> converged, more SA neither helps nor hurts. system placement at 90000 = 42s (OK).
+  - DECISION: raised cap 45000 -> 90000 (engine.py). Default-path re-route: system 98.3% (176/179,
+    +5 nets vs 95.5%), motor_power 66.1% (flat). MERGED to local main (71c1eed). 112 tests green.
+  - Trade-off logged: ~2x placement time on large boards (system 20->42s) -> slower multi-seed
+    gallery on big boards. A fast-preview/quality-final split is a possible future refinement.
+
+- Wave 3 (probabilistic swap, branch sa-probabilistic-swap 16fb237): swaps were accepted greedily
+  (T=0) while nudge/rotate use Metropolis. Hypothesis: most interesting for motor_power, STUCK at
+  66.1% regardless of SA effort (a basin only a non-local escape move can leave). Gating multi-seed
+  (system + motor_power, seeds 0/1/2) on top of the raised cap. [in progress]
