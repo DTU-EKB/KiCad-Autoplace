@@ -80,3 +80,23 @@ def test_whitespace_connectivity_full_board_is_zero():
     b = Board(0, 0, 10, 10)
     b.components = {"A": _part("A", 5, 5, w=20, h=20)}  # covers the whole grid
     assert metrics.whitespace_connectivity(b) == 0.0
+
+
+def test_decap_proximity_mean_distance_and_zero_when_none():
+    from autoplace.model import Board, Component, Pad
+    b = Board(0, 0, 100, 100)
+    b.components = {
+        "U1": Component("U1", 6, 6, x=10, y=10, pads=[
+            Pad("1", "+5V", -2.0, 0.0), Pad("2", "GND", 2.0, 0.0), Pad("3", "SIG", 0.0, 2.0)]),
+        "C1": Component("C1", 2, 1, x=10, y=40, pads=[
+            Pad("1", "+5V", -0.8, 0.0), Pad("2", "GND", 0.8, 0.0)]),
+    }
+    # cap rail pad world = (10-0.8, 40) = (9.2, 40); IC rail pad = (10-2, 10) = (8, 10)
+    # dist = hypot(1.2, 30) ~= 30.024
+    d = metrics.decap_proximity(b)
+    assert 29.5 < d < 30.5
+
+    b2 = Board(0, 0, 50, 50)
+    b2.components = {"R1": Component("R1", 2, 1, x=5, y=5,
+                                     pads=[Pad("1", "A", -0.8, 0), Pad("2", "B", 0.8, 0)])}
+    assert metrics.decap_proximity(b2) == 0.0
