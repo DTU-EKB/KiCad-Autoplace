@@ -101,6 +101,13 @@
     boards (system, OVN) get slower-but-better placement; motor_power(58)+small boards unaffected.
     Gallery-speed impact is limited to large boards; acceptable for the quality gain.
 
-- Wave 5 (validate cumulative wins on the external OVN board): re-run OVN human(import) vs ours
-  on current main (aesthetic + SA cap 90k). OVN has 77 free -> now 53900 steps (was 45000-capped),
-  so expect ours >= the prior 70%. [in progress]
+- Wave 5 (OVN re-validation on current main): human(import) 56.9% vs ours 70.0% (+13pt), stable.
+  SA cap did NOT add for OVN (53900 steps now vs 45000) -> OVN is routing-ceiling-limited, not
+  search-limited (consistent with corpus). NO regression; session wins carry through on the
+  external board. The engine is at human parity (corpus) + beats raw import (OVN) + tidier.
+
+- Wave 6 (aesthetic v2 — even-spacing): with placement at human parity + most boards
+  routing-ceiling-limited, the remaining on-theme value is VISIBLE polish. Add even-spacing of
+  parts within an aligned group (extend aesthetic.py), legality-preserving (overlap+bounds guard,
+  bounded moves), gated for routing NON-REGRESSION (watch system, the only near-ceiling board) +
+  tidiness improvement + 0 overlaps. Aesthetic feature (not a routing feature). [in progress]
