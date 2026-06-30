@@ -8,7 +8,11 @@ _GROUND_LEAVES = {"GND", "AGND", "DGND", "PGND", "GNDA", "GNDD", "EARTH"}
 # Explicit power-rail leaf names (beyond the +N / -N numeric pattern).
 _POWER_LEAVES = {"VCC", "VDD", "VBAT", "VIN", "VOUT", "VBUS", "VMOT", "VDDA", "VCCA", "VSS"}
 _POWER_RE = re.compile(r"^[+-]\d")                       # +15V2, +5V_PWR, -15V
-_SENSE_RE = re.compile(r"SENSE|ISNS|ISEN|VSEN|FB|FEEDBACK|VREF|ADC")
+# Sense/feedback tokens, anchored to name-segment boundaries (start, end, '_', or a
+# digit) so mid-token substrings (CADC, DFBX) don't mis-hit. ISENSE is its own token
+# because SENSE is not at a boundary inside it.
+_SENSE_RE = re.compile(
+    r"(?:^|_)(?:ISENSE|SENSE|ISNS|ISEN|VSEN|FEEDBACK|FB|VREF|ADC)(?:_|[0-9]|$)")
 
 
 def is_gnd_name(name: str) -> bool:

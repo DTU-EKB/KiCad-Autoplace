@@ -89,3 +89,15 @@ def test_classify_empty_pintype_falls_back_to_name():
     assert nets.classify_net(b, "+5V") == "POWER"
     assert nets.classify_net(b, "ADC_X") == "SENSE"
     assert nets.classify_net(b, "SOMESIG") == "SIGNAL"
+
+
+def test_sense_regex_is_boundary_anchored():
+    # mid-token substrings no longer mis-hit SENSE
+    b = _board({"CADC": ["passive"], "GRADC_X": ["passive"], "DFBX": ["passive"]})
+    for net in ("CADC", "GRADC_X", "DFBX"):
+        assert nets.classify_net(b, net) == "SIGNAL", net
+    # legitimate sense names still classify SENSE
+    b2 = _board({"ADC_V1": ["input"], "FB": ["input"], "ISENSE": ["passive"],
+                 "VREF": ["passive"], "I_SENSE_A": ["passive"], "ISNS": ["passive"]})
+    for net in ("ADC_V1", "FB", "ISENSE", "VREF", "I_SENSE_A", "ISNS"):
+        assert nets.classify_net(b2, net) == "SENSE", net
