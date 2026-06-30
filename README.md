@@ -1,7 +1,7 @@
 # KiCad-Autoplace
 
-Connectivity-aware **automatic PCB placement and single-sided routing** for KiCad,
-as a desktop app. Built for students at DTU Ballerup Campus. A companion to
+Connectivity-aware **automatic PCB placement and routing** (single- or
+double-sided) for KiCad, as a desktop app. Built for students at DTU Ballerup Campus. A companion to
 [KiCad-components](https://github.com/DTU-EKB/KiCad-components) — that repo gives
 you the symbols and footprints, this one places and routes them.
 
