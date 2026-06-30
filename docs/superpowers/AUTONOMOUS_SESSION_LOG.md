@@ -83,6 +83,14 @@
   and swap policy). Neither can SHOW further engine improvement. To detect future wins I must
   gate on corpus boards that have routing HEADROOM.
 
-- Wave 4 (corpus headroom baseline): route all 12 canonical corpus boards at seed 0 on current
-  main (cap=90000) to find which have headroom (<~90%) so later experiments are measured where
-  signal is visible. [in progress]
+- Wave 4 (corpus headroom baseline, main cap=90000, seed 0):
+    system 98.3 | buck 81.2 | motor_feedback 81.0 | mppt_buck 69.2 | boost 68.8 | mppt 66.7 |
+    motor_power 66.1 | rectifier 65.0 | current_sense 62.2 | c2000_feedback 61.7 | drive_circuit 60.0 |
+    feedback_circuit 59.1
+  STRIKING PATTERN: only `system` (large, hierarchical -> FLOORPLAN path) routes well; nearly all
+  the small/flat boards (FORCE-DIRECTED path) route 59-81%. Hypothesis: the flat-board placement
+  path is weak -> potentially the biggest lever. MUST first confirm vs HUMAN baseline (is our
+  placement bad, or is it a board/netclass routing ceiling?).
+  - Wave 4b: human(original import positions) vs ours on the worst boards (feedback_circuit,
+    drive_circuit, c2000_feedback). If human >> ours -> our flat-board placement is the problem
+    (big opportunity). If human ~= ours -> board/netclass ceiling (no placement win there). [in progress]
