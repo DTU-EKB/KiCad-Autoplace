@@ -25,11 +25,19 @@ def _mm(v) -> float:
     return pcbnew.ToMM(v)
 
 
-def _is_connector(fp) -> bool:
+def _safe(getter, default=""):
+    """Call a pcbnew getter, returning ``default`` on any failure / None."""
+    try:
+        v = getter()
+    except Exception:
+        return default
+    return v if v is not None else default
+
+
+def _is_connector(fp, fpid: str) -> bool:
     ref = fp.GetReference()
     if ref and ref[0] == "J":
         return True
-    fpid = fp.GetFPIDAsString()
     return any(h in fpid for h in _CONNECTOR_HINTS)
 
 
@@ -48,17 +56,16 @@ def build_model(pcb: "pcbnew.BOARD") -> Board:
         ref = fp.GetReference()
         bb = fp.GetBoundingBox(False)               # geometry, no text
         cx, cy = _mm(bb.GetCenter().x), _mm(bb.GetCenter().y)
-        try:
-            sheet = fp.GetSheetname() or ""
-        except Exception:
-            sheet = ""
+        fpid = _safe(fp.GetFPIDAsString)
         comp = Component(
             ref=ref,
             w=_mm(bb.GetWidth()), h=_mm(bb.GetHeight()),
             x=cx, y=cy,
             locked=fp.IsLocked(),
-            is_connector=_is_connector(fp),
-            sheet=sheet,
+            is_connector=_is_connector(fp, fpid),
+            sheet=_safe(fp.GetSheetname),
+            value=_safe(fp.GetValue),
+            fpid=fpid,
         )
         for pad in fp.Pads():
             pp = pad.GetPosition()
@@ -67,6 +74,8 @@ def build_model(pcb: "pcbnew.BOARD") -> Board:
                 net=pad.GetNetname() or "",
                 ox=_mm(pp.x) - cx,                   # offset from bbox centre
                 oy=_mm(pp.y) - cy,
+                pin_type=_safe(pad.GetPinType),
+                pin_function=_safe(pad.GetPinFunction),
             ))
         board.components[ref] = comp
     return board
