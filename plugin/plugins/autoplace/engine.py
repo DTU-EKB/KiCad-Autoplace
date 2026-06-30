@@ -45,11 +45,15 @@ def place(board: Board, *, seed: int = 0, grid: float = 0.5, margin: float = 0.8
     block_map = blocks.detect_blocks(board)
     n_blocks = len(set(block_map.values()))
 
-    # Scale SA effort with the number of free parts, bounded so even the 131-part
-    # system board finishes in well under a minute.
+    # Scale SA effort with the number of free parts. The cap was 45000, but a
+    # FreeRouting sweep showed the 131-part system board is SEARCH-LIMITED there:
+    # routed-% climbs 89.4 -> 95.5 -> 98.3 as steps go 22500 -> 45000 -> 90000.
+    # Raised to 90000 (system placement ~42s, still under a minute). Smaller boards
+    # (n_free < ~64) are unaffected; the dense motor_power board is already converged
+    # (flat 66.1% across the sweep), so the higher cap helps large boards and never hurts.
     n_free = len(board.free())
     if sa_steps is None:
-        sa_steps = max(3500, min(45000, n_free * 700))
+        sa_steps = max(3500, min(90000, n_free * 700))
     fd_iters = max(iters, n_free * 6)
 
     # Density-adaptive routing-channel weight: on a board packed near its area
