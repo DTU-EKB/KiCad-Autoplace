@@ -45,15 +45,19 @@ def place(board: Board, *, seed: int = 0, grid: float = 0.5, margin: float = 0.8
     block_map = blocks.detect_blocks(board)
     n_blocks = len(set(block_map.values()))
 
-    # Scale SA effort with the number of free parts. The cap was 45000, but a
-    # FreeRouting sweep showed the 131-part system board is SEARCH-LIMITED there:
-    # routed-% climbs 89.4 -> 95.5 -> 98.3 as steps go 22500 -> 45000 -> 90000.
-    # Raised to 90000 (system placement ~42s, still under a minute). Smaller boards
-    # (n_free < ~64) are unaffected; the dense motor_power board is already converged
-    # (flat 66.1% across the sweep), so the higher cap helps large boards and never hurts.
+    # Scale SA effort with the number of free parts. Two FreeRouting sweeps set
+    # these numbers. (1) The cap: the 131-part system board is SEARCH-LIMITED
+    # below 90000 (routed-% climbs 89.4 -> 95.5 -> 98.3 over 22500 -> 45000 ->
+    # 90000; ~42s placement). (2) The per-part budget: under the single-sided
+    # laser gate, small dense boards were search-limited at 700 steps/part --
+    # motor_power routed 62.2 / 73.2 / 78.0 / 78.0 percent and mppt_buck 85.2 /
+    # 74.1 / 88.9 / 92.6 percent at 0.5/1/2/4x -- so 700 starved them (the old
+    # 2-sided gate could not see this: it saturates at ~100% corpus-wide).
+    # 2800/part puts every board at or past its measured plateau (boards with
+    # >32 free parts hit the cap; placement stays seconds-fast on small boards).
     n_free = len(board.free())
     if sa_steps is None:
-        sa_steps = max(3500, min(90000, n_free * 700))
+        sa_steps = max(3500, min(90000, n_free * 2800))
     fd_iters = max(iters, n_free * 6)
 
     # Density-adaptive routing-channel weight: on a board packed near its area
