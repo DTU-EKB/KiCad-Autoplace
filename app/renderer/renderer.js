@@ -25,6 +25,8 @@ const state = {
   geometry: null,
   connectors: new Set(),
   lockedFootprints: new Set(),
+  fileLocked: new Set(),      // locked in the .kicad_pcb itself (immutable here)
+  pinnedPositions: {},        // ref -> [x, y] dragged-to spots (mm, board coords)
   refineToolsOk: false,
   candidates: [],
   committedSeed: null,
@@ -33,6 +35,18 @@ const state = {
   history: [], // [{ id, label, date, metric }]
   historyCounter: 0
 };
+
+// Persist the user's intent (connectors + locks + dragged positions) next to
+// the board so cli.py picks it up on the next place/refine run.
+async function saveSidecar(board = state.board) {
+  if (!board) return;
+  await window.api.saveSidecar({
+    board,
+    connectors: [...state.connectors],
+    locked: [...state.lockedFootprints].filter((r) => !state.fileLocked.has(r)),
+    positions: state.pinnedPositions,
+  });
+}
 
 // ---- SVG / Dragging State ----
 let dragState = null; // { element, ref, startX, startY, origX, origY, scale }
@@ -115,14 +129,19 @@ function handleDragEnd(evt) {
     // It was just a click -> toggle connector
     toggleConnector(dragState.ref);
   } else {
-    // Commit move
+    // Commit move: remember the spot and auto-lock so the engine pins it there.
     const fp = state.geometry.footprints.find(f => f.ref === dragState.ref);
     if (fp) {
       fp.x = dragState.origX + dx;
       fp.y = dragState.origY + dy;
-      // We could lock it automatically when manually moved
+      state.pinnedPositions[dragState.ref] = [
+        Math.round(fp.x * 100) / 100,
+        Math.round(fp.y * 100) / 100,
+      ];
       if (!state.lockedFootprints.has(dragState.ref)) {
-        toggleLock(dragState.ref, false);
+        toggleLock(dragState.ref, false);   // toggleLock persists the sidecar
+      } else {
+        saveSidecar();
       }
     }
   }
@@ -196,16 +215,22 @@ function updateFootprintStats() {
 async function toggleConnector(ref) {
   if (state.connectors.has(ref)) state.connectors.delete(ref);
   else state.connectors.add(ref);
-  await window.api.saveConnectors({
-    board: state.board,
-    connectors: [...state.connectors],
-  });
+  await saveSidecar();
   renderBoard(state.geometry);
 }
 
 function toggleLock(ref, reRender = true) {
-  if (state.lockedFootprints.has(ref)) state.lockedFootprints.delete(ref);
-  else state.lockedFootprints.add(ref);
+  if (state.fileLocked.has(ref)) {
+    appendLog(`${ref} is locked in the board file itself — unlock it in KiCad.`);
+    return;
+  }
+  if (state.lockedFootprints.has(ref)) {
+    state.lockedFootprints.delete(ref);
+    delete state.pinnedPositions[ref];   // unlock forgets the pinned spot
+  } else {
+    state.lockedFootprints.add(ref);
+  }
+  saveSidecar();
   if (reRender) renderBoard(state.geometry);
   else updateFootprintStats();
 }
@@ -223,14 +248,30 @@ async function loadBoardView() {
     return;
   }
   state.geometry = res.geometry;
-  const saved = await window.api.loadConnectors({ board: state.board });
+  const saved = await window.api.loadSidecar({ board: state.board });
   state.connectors = new Set(
-    saved ||
+    (saved && saved.connectors) ||
       res.geometry.footprints
         .filter((f) => f.is_connector_guess)
         .map((f) => f.ref)
   );
-  // Default no locked footprints initially
+  // Locks: parts locked in the board file itself + the user's sidecar pins.
+  state.fileLocked = new Set(
+    res.geometry.footprints.filter((f) => f.locked).map((f) => f.ref)
+  );
+  state.lockedFootprints = new Set([
+    ...state.fileLocked,
+    ...((saved && saved.locked) || []),
+  ]);
+  // Re-apply dragged positions so the canvas shows the pinned spots.
+  state.pinnedPositions = (saved && saved.positions) || {};
+  for (const [ref, xy] of Object.entries(state.pinnedPositions)) {
+    const fp = res.geometry.footprints.find((f) => f.ref === ref);
+    if (fp && Array.isArray(xy) && xy.length === 2) {
+      fp.x = xy[0];
+      fp.y = xy[1];
+    }
+  }
   $("boardView").hidden = false;
   $("boardMode").textContent = "Before placement";
   renderBoard(state.geometry);
@@ -510,6 +551,7 @@ async function run() {
     python: state.python,
     strategy: $("strategy").value,
     fab: $("fab").value,
+    sides: parseInt($("sides").value, 10) || 2,
     count: 6,
   });
 
@@ -561,10 +603,7 @@ async function commitSeed(seed) {
     setProgress("done", 100);
     state.committedSeed = seed;
     state.refineBoard = res.output;
-    await window.api.saveConnectors({
-      board: res.output,
-      connectors: [...state.connectors],
-    });
+    await saveSidecar(res.output);   // refine on the output keeps the same pins
     showResults(res.report, res.output);
     
     // Add to history

@@ -30,16 +30,28 @@ def _apply_fab(out_path, fab):
     return fabrication.apply_to_project(out_pro, fab)
 
 
-def _read_connectors(in_path):
-    """Read the connector ref list from <stem>.autoplace.json, or None."""
+def _read_sidecar(in_path):
+    """Read the app sidecar <stem>.autoplace.json ({} if missing/corrupt).
+
+    Keys: ``connectors`` (edge-pinned refs), ``locked`` (refs the engine must
+    not move), ``positions`` ({ref: [x, y]} dragged-to spots, mm board coords).
+    """
     side = os.path.splitext(in_path)[0] + ".autoplace.json"
     if os.path.exists(side):
         try:
             with open(side, encoding="utf-8") as f:
-                return json.load(f).get("connectors")
+                data = json.load(f)
+                return data if isinstance(data, dict) else {}
         except Exception:
-            return None
-    return None
+            return {}
+    return {}
+
+
+def _apply_pins(model, sc):
+    """Apply the sidecar's dragged positions + locks to the model."""
+    from autoplace import sidecar
+    return sidecar.apply_pins(model, positions=sc.get("positions"),
+                              locked=sc.get("locked"))
 
 
 def cmd_place(args):
@@ -71,11 +83,14 @@ def cmd_place(args):
     if stream:
         emit({"type": "progress", "stage": "load", "percent": 0.0})
     model, pcb = kicad_io.load_board(in_path)
-    connectors = _read_connectors(in_path)
+    sc = _read_sidecar(in_path)
+    connectors = sc.get("connectors")
+    moved, locked = _apply_pins(model, sc)
     report = engine.place(model, seed=seed, strategy=strategy,
                           connectors=connectors, margin=fabrication.margin_for(fab),
                           track=fabrication.track_for(fab), progress=progress,
                           aesthetic=aesthetic)
+    report["pinned"] = {"moved": moved, "locked": locked}
     kicad_io.apply_placement(model, pcb, out_path)
     # carry the project file so net-class (track/clearance) rules survive: the
     # router reads widths from <stem>.kicad_pro, not the .kicad_pcb.
@@ -142,7 +157,9 @@ def cmd_place_multi(args):
     fab = _fab()
     emit({"type": "progress", "stage": "load", "percent": 0.0})
     model, _ = kicad_io.load_board(in_path)
-    connectors = _read_connectors(in_path)
+    sc = _read_sidecar(in_path)
+    connectors = sc.get("connectors")
+    _apply_pins(model, sc)      # candidates deepcopy the model -> pins inherited
     buf = []
     keys = ("seed", "overlaps", "sheet_spread_score", "pinch_fraction",
             "whitespace_connectivity", "decap_proximity", "hpwl_mm")
@@ -313,8 +330,10 @@ def cmd_refine(args):
                   "routed_pct": round(pct, 1), "best_pct": round(best_pct, 1)})
 
     model, pcb = kicad_io.load_board(in_path)
+    sc = _read_sidecar(in_path)
+    _apply_pins(model, sc)
     # keep flagged connectors pinned to the edge they already sit on
-    for ref in (_read_connectors(in_path) or []):
+    for ref in (sc.get("connectors") or []):
         c = model.components.get(ref)
         if c is not None and not c.locked:
             c.is_connector = True
