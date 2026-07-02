@@ -163,10 +163,14 @@ def cmd_place_multi(args):
     buf = []
     keys = ("seed", "overlaps", "sheet_spread_score", "pinch_fraction",
             "whitespace_connectivity", "decap_proximity", "hpwl_mm")
+    # Parallel by default: candidates are pure functions of (model, seed), so
+    # worker processes return byte-identical results, in completion order (the
+    # app keys cards by seed). PLACE_PARALLEL=0 forces the serial path.
+    par = os.environ.get("PLACE_PARALLEL", "1") != "0"
     for i, cand in enumerate(multiseed.run_candidates(
             model, count, strategy=strategy, connectors=connectors,
             margin=fabrication.margin_for(fab), track=fabrication.track_for(fab),
-            aesthetic=aesthetic)):
+            aesthetic=aesthetic, parallel=par)):
         cand["index"] = i
         cand["count"] = count
         emit({"type": "progress", "stage": "place",
@@ -175,6 +179,7 @@ def cmd_place_multi(args):
         if cand.get("type") == "candidate":
             buf.append({k: cand[k] for k in keys})     # lightweight: no board geometry
 
+    buf.sort(key=lambda c: c["seed"])   # completion order must not sway ranking ties
     ranked = ranking.pre_rank(buf)
     if ranked:
         emit({"type": "ranking", "order": [c["seed"] for c in ranked],
