@@ -162,3 +162,63 @@ loop — NOT scheduling another wakeup — for a principled reason, not exhausti
   app-side items (gallery preview/final split). Left for the user to direct on return.
 Net result of the session: 2 gated wins merged to local main (SA cap 90k, aesthetic alignment),
 engine validated at human placement parity + beats raw import (OVN +13pt), all experiments logged.
+
+---
+
+# Session 2 (2026-07-02): the gate was lying — GND-counting artifact found and fixed
+
+**Directive:** make it "perfect"; HANDOFF §6 says fix measurement first. §4.2's suspicion confirmed.
+
+## The artifact (HANDOFF §4.2 RESOLVED)
+Every corpus board except `system` ships its copper pours **net-less with `connect_pads no`**.
+`force_gnd_zones` assigned them to GND and filled them, so the DSN carries a GND plane and
+FreeRouting (correctly) never routes ground — but a `connect_pads no` fill never touches a pad,
+so KiCad's connectivity counted **every GND pad-to-pad connection as unrouted ratsnest**, in
+`total` before routing and in `left` after. Consequence: routed-% was deflated by the board's GND
+share, identically for human and engine placement (which is why Wave 4b saw "human == ours" at
+59–61% — artifact == artifact). `system`'s zones are net-GND `connect_pads yes`, hence its honest
+98%. Physically the bug also mattered: a pour that touches no pads etches as floating copper.
+
+Evidence chain: feedback_circuit gate flow reproduced 59.1% (total=22, left=9); per-net analysis
+showed the 9 leftover edges were exactly GND (10 GND pads, zone connects nothing); flipping the
+zones to a real pad connection + refill → 0 unrouted. DSN contains `(plane GND …)` on both layers.
+
+**Fix (commit 18bdb10):** `force_gnd_zones` now sets THERMAL pad connection on the pours it
+grounds when they ship with connection NONE (zones that already carry a net keep the designer's
+setting). THERMAL (not FULL) because the function also runs in the production path and thermal
+reliefs keep joints hand-solderable. Verified: feedback_circuit 59.1% → 100.0%.
+
+## Corpus re-baseline (fixed gate, 2-sided, CNC netclass, -mp 20, seed 0)
+| board | old | new | | board | old | new |
+|---|---|---|---|---|---|---|
+| system | 98.3 | **98.3** (176/179) | | mppt | 66.7 | **96.2** (25/26) |
+| buck | 81.2 | **100.0** | | motor_power | 66.1 | **100.0** (82/82) |
+| motor_feedback | 81.0 | **100.0** | | rectifier | 65.0 | **100.0** |
+| mppt_buck | 69.2 | **100.0** | | current_sense | 62.2 | **100.0** |
+| boost | 68.8 | **100.0** | | c2000_feedback | 61.7 | **100.0** |
+| feedback_circuit | 59.1 | **100.0** | | drive_circuit | 60.0 | **100.0** |
+
+`system` unchanged (its zones were never affected — clean control). mppt's single leftover edge is
+a GND pad the THERMAL spokes cannot reach (FULL connects it): a real manufacturability signal
+(strap needed), not a routing failure. **The corpus is saturated at 2-sided rules**: motor_power
+was never "density-capped" — it routes completely. Prior-session REJECT verdicts that gated on
+motor_power/system routed-% (probabilistic swap, even-spacing) were measured against a deflated
+denominator on motor_power; their re-test needs the new headroom gate. OVN is NOT affected (its
+zone is net-GND with default thermal connect) — the +13pt import-vs-ours win stands, and at 70%
+OVN is the one known board with genuine 2-sided headroom.
+
+## Determinism (HANDOFF §4.4 RESOLVED)
+Cross-process probe: PYTHONHASHSEED ∈ {0, 1, 42}, three separate processes, boards covering both
+seed paths (feedback_circuit, motor_power flat; system hierarchical), aesthetic ON+OFF — **all
+digests identical**. The engine also contains no numpy/BLAS (pure-Python floats), so concurrent
+CPU load cannot alter placement results. The historical 21↔22 alignment flip cannot have been
+engine placement math; keep the "no heavy jobs during a gate route" rule only as FreeRouting-noise
+hygiene. `determinism_probe.py` gained PROBE_N for cheap cross-process runs.
+
+## Hygiene
+`tools/gate` scripts now take FREEROUTING_JAR / GATE_PASSES / GATE_SIDES / GATE_FAB env overrides
+(HANDOFF §4.9 done). GATE_SIDES=1 is the single-sided laser gate lever.
+
+## Next
+Single-sided (GATE_SIDES=1) corpus baseline running — the fab-matched gate and the headroom
+candidate. Then: user decision on single- vs 2-sided target (§4.6) + headroom boards (§4.1).

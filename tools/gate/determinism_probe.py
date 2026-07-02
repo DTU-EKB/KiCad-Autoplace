@@ -1,14 +1,18 @@
 """Is engine.place deterministic? Place the same board N times in ONE process and
-fingerprint the geometry. Stable digest (sha1 of rounded coords), hashseed-independent.
+fingerprint the geometry. Stable digest (sha1 of rounded coords). For CROSS-process
+hashseed-independence, run this several times with different PYTHONHASHSEED values
+(PROBE_N=1 makes that cheap) and compare the printed digests across runs.
   python determinism_probe.py <board1> [<board2> ...]
 """
 import copy
 import hashlib
+import os
 import sys
 sys.path.insert(0, "plugin/plugins")
 from autoplace import engine, fabrication, kicad_io  # noqa: E402
 
 M, T = fabrication.margin_for("cnc"), fabrication.track_for("cnc")
+N = int(os.environ.get("PROBE_N", "5"))
 
 def fp(board):
     s = ";".join(f"{c.ref},{round(c.x,3)},{round(c.y,3)},{c.rot}"
@@ -19,7 +23,7 @@ for src in sys.argv[1:]:
     name = src.replace("\\", "/").rsplit("/", 1)[-1]
     base, _ = kicad_io.load_board(src)
     digests_off, digests_on = [], []
-    for _ in range(5):
+    for _ in range(N):
         b = copy.deepcopy(base)
         engine.place(b, seed=0, margin=M, track=T, aesthetic=False)
         digests_off.append(fp(b))
