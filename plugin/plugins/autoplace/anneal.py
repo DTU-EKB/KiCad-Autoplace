@@ -181,7 +181,10 @@ class Annealer:
         nets = set()
         for c in subset:
             nets |= self.comp_nets[c.ref]
-        for net in nets:
+        # sorted: float summation order must not follow str-set iteration order,
+        # which varies with hash randomization -- a last-ulp difference here can
+        # flip one SA accept and cascade into a different final layout per process.
+        for net in sorted(nets):
             cost += W.HPWL * self._net_hpwl(net)
         seen = set()
         for c in subset:
