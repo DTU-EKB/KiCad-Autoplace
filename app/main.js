@@ -95,6 +95,7 @@ function candidatePythons() {
     const roots = [
       "C:\\Program Files\\KiCad",
       "C:\\Program Files (x86)\\KiCad",
+      path.join(process.env.LOCALAPPDATA || "", "Programs", "KiCad"),
     ];
     for (const root of roots) {
       let vers = [];
