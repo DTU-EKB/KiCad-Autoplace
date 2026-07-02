@@ -1,6 +1,6 @@
 {
   "name": "dtu-ekb-autoplace-app",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Desktop front-end for the DTU-EKB KiCad auto-placement engine.",
   "main": "main.js",
   "author": "DTU and EKB Contributors",
