@@ -188,7 +188,7 @@ function tracksSvgMarkup(geom) {
   return lines + dots;
 }
 
-function boardSvgMarkup(geom, { labels = true } = {}) {
+function boardSvgMarkup(geom, { labels = true, grid = false } = {}) {
   const o = geom.outline;
   const W = o.x1 - o.x0;
   const H = o.y1 - o.y0;
@@ -217,8 +217,16 @@ function boardSvgMarkup(geom, { labels = true } = {}) {
       );
     })
     .join("");
+  // 10 mm engineering grid, aligned to the board origin (main canvas only).
+  const gridLayer = grid
+    ? `<defs><pattern id="mmgrid" width="10" height="10" patternUnits="userSpaceOnUse">` +
+      `<path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(130,150,190,0.09)" stroke-width="0.12"/>` +
+      `</pattern></defs>` +
+      `<rect x="0" y="0" width="${W.toFixed(1)}" height="${H.toFixed(1)}" fill="url(#mmgrid)"/>`
+    : "";
   const inner =
-    `<rect x="0" y="0" width="${W.toFixed(1)}" height="${H.toFixed(1)}" fill="none" stroke="rgba(255,255,255,0.1)"/>` +
+    gridLayer +
+    `<rect x="0" y="0" width="${W.toFixed(1)}" height="${H.toFixed(1)}" fill="none" stroke="rgba(255,255,255,0.16)" stroke-width="0.25"/>` +
     tracksSvgMarkup(geom) +      // copper under the translucent footprints
     parts;
   return { W, H, inner };
@@ -230,16 +238,27 @@ function isRoutedView() {
 
 function renderBoard(geom) {
   const host = $("boardCanvas");
-  const { W, H, inner } = boardSvgMarkup(geom, { labels: true });
+  const { W, H, inner } = boardSvgMarkup(geom, { labels: true, grid: true });
   host.innerHTML =
     `<svg viewBox="0 0 ${W.toFixed(1)} ${H.toFixed(1)}">` + inner + `</svg>`;
-  
+
   const svg = host.querySelector('svg');
   svg.addEventListener('mousedown', handleDragStart);
   svg.addEventListener('mousemove', handleDragMove);
   window.addEventListener('mouseup', handleDragEnd); // Catch outside drops
   svg.addEventListener('contextmenu', handleRightClick);
 
+  // Live mm coordinate readout (board coordinates, like an EDA status bar).
+  const o = geom.outline;
+  const coord = $("coordReadout");
+  svg.addEventListener("mousemove", (evt) => {
+    const pt = getSvgCoords(svg, evt);
+    coord.textContent =
+      `x ${(pt.x + o.x0).toFixed(2)}  y ${(pt.y + o.y0).toFixed(2)} mm`;
+  });
+  svg.addEventListener("mouseleave", () => (coord.textContent = ""));
+
+  $("layerLegend").hidden = !isRoutedView();
   updateFootprintStats();
 }
 
@@ -308,6 +327,7 @@ async function loadBoardView() {
       fp.y = xy[1];
     }
   }
+  $("emptyState").hidden = true;
   $("boardView").hidden = false;
   $("boardMode").textContent = "Before placement";
   renderBoard(state.geometry);
@@ -429,7 +449,11 @@ function stageLabel(stage) {
 
 function appendLog(line) {
   const log = $("log");
-  log.textContent += line + "\n";
+  const row = document.createElement("div");
+  row.textContent = line;
+  if (/^\$ /.test(line)) row.className = "log-cmd";
+  else if (/error|failed|traceback|exception/i.test(line)) row.className = "log-err";
+  log.appendChild(row);
   log.scrollTop = log.scrollHeight;
 }
 
@@ -879,7 +903,23 @@ $("reveal").addEventListener("click", () => {
 });
 $("logToggle").addEventListener("click", () => openLog());
 
+// Remember the user's canvas height (the .board-canvas is resize: vertical).
+function initCanvasResize() {
+  const canvas = $("boardCanvas");
+  const saved = localStorage.getItem("canvasHeight");
+  if (saved) canvas.style.height = saved;
+  let t = null;
+  new ResizeObserver(() => {
+    clearTimeout(t);
+    t = setTimeout(
+      () => localStorage.setItem("canvasHeight", canvas.style.height || ""),
+      250
+    );
+  }).observe(canvas);
+}
+
 async function init() {
+  initCanvasResize();
   await detect();
   const tools = await window.api.checkRefineTools();
   state.refineToolsOk = tools.ok;
