@@ -86,6 +86,7 @@ function handleDragStart(evt) {
 
 function handleDragMove(evt) {
   if (!dragState) return;
+  if (isRoutedView()) return;   // moving a part would orphan its copper; click still toggles
   const svg = $("boardCanvas").querySelector('svg');
   const pt = getSvgCoords(svg, evt);
   const dx = pt.x - dragState.startX;
@@ -157,6 +158,36 @@ function handleRightClick(evt) {
 }
 
 
+// KiCad-style copper colors per layer (front red, back blue).
+const COPPER_COLORS = { "F.Cu": "#e0524f", "B.Cu": "#4a8de0" };
+
+function tracksSvgMarkup(geom) {
+  const o = geom.outline;
+  const segs = (geom.tracks || []).filter((t) => t.kind === "seg");
+  const vias = (geom.tracks || []).filter((t) => t.kind === "via");
+  // back copper first so front copper draws on top, like KiCad
+  segs.sort((a, b) => (a.layer === "B.Cu" ? -1 : 1) - (b.layer === "B.Cu" ? -1 : 1));
+  const lines = segs
+    .map(
+      (t) =>
+        `<line x1="${(t.x1 - o.x0).toFixed(2)}" y1="${(t.y1 - o.y0).toFixed(2)}" ` +
+        `x2="${(t.x2 - o.x0).toFixed(2)}" y2="${(t.y2 - o.y0).toFixed(2)}" ` +
+        `stroke="${COPPER_COLORS[t.layer] || "#8a8a8a"}" stroke-width="${t.w.toFixed(2)}" ` +
+        `stroke-linecap="round" opacity="0.9"/>`
+    )
+    .join("");
+  const dots = vias
+    .map(
+      (t) =>
+        `<circle cx="${(t.x - o.x0).toFixed(2)}" cy="${(t.y - o.y0).toFixed(2)}" ` +
+        `r="${(t.d / 2).toFixed(2)}" fill="#b8b8b8" stroke="#666" stroke-width="0.1"/>` +
+        `<circle cx="${(t.x - o.x0).toFixed(2)}" cy="${(t.y - o.y0).toFixed(2)}" ` +
+        `r="${(t.d / 5).toFixed(2)}" fill="#20242e"/>`
+    )
+    .join("");
+  return lines + dots;
+}
+
 function boardSvgMarkup(geom, { labels = true } = {}) {
   const o = geom.outline;
   const W = o.x1 - o.x0;
@@ -188,8 +219,13 @@ function boardSvgMarkup(geom, { labels = true } = {}) {
     .join("");
   const inner =
     `<rect x="0" y="0" width="${W.toFixed(1)}" height="${H.toFixed(1)}" fill="none" stroke="rgba(255,255,255,0.1)"/>` +
+    tracksSvgMarkup(geom) +      // copper under the translucent footprints
     parts;
   return { W, H, inner };
+}
+
+function isRoutedView() {
+  return !!(state.geometry && state.geometry.tracks && state.geometry.tracks.length);
 }
 
 function renderBoard(geom) {
@@ -430,6 +466,15 @@ function showResults(report, output) {
   $("mOverlap").textContent = fmt(report.overlaps_remaining);
   $("mComps").textContent = fmt(a.components);
   $("mBlocks").textContent = `${report.blocks} block${report.blocks === 1 ? "" : "s"}`;
+
+  // Routed tile: only refine reports carry a routed percentage.
+  const hasRouted = typeof report.routed_pct === "number";
+  $("mRoutedWrap").hidden = !hasRouted;
+  if (hasRouted) {
+    $("mRouted").textContent = report.routed_pct;
+    $("mRoutedDetail").textContent =
+      report.sides === 1 ? "single-sided" : "double-sided";
+  }
 
   $("outPath").textContent = output;
   $("projNote").textContent = report.project_copied ? "· net-class rules carried over" : "";
@@ -694,10 +739,17 @@ async function runRefine() {
     
     addHistoryEntry(`Refined`, res.report);
 
-    const dump = await window.api.dumpBoard({ python: state.python, board: res.output });
+    // Show the ROUTED board (actual copper), not just the refined placement.
+    const routed = res.report.routed_output;
+    const dump = await window.api.dumpBoard({
+      python: state.python,
+      board: routed || res.output,
+    });
     if (dump.ok) {
       state.geometry = dump.geometry;
-      $("boardMode").textContent = "after refinement";
+      $("boardMode").textContent = isRoutedView()
+        ? `after refinement · routed ${res.report.routed_pct}%`
+        : "after refinement";
       renderBoard(state.geometry);
     }
   } else if (res.cancelled) {

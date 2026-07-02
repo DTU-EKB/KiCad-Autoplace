@@ -295,11 +295,13 @@ def cmd_metrics(args):
 
 
 def cmd_dump(args):
-    """Emit board geometry as one JSON line for the desktop canvas."""
+    """Emit board geometry (+ any routed copper) as one JSON line for the canvas."""
     from autoplace import blocks, serialize
-    model, _ = kicad_io.load_board(args[0])
+    model, pcb = kicad_io.load_board(args[0])
     blocks.detect_blocks(model)
-    sys.stdout.write(json.dumps(serialize.board_to_dict(model)) + "\n")
+    d = serialize.board_to_dict(model)
+    d["tracks"] = kicad_io.tracks_to_dicts(pcb)
+    sys.stdout.write(json.dumps(d) + "\n")
     return 0
 
 
@@ -334,7 +336,9 @@ def cmd_refine(args):
             emit({"type": "iteration", "iter": it, "budget": budget,
                   "routed_pct": round(pct, 1), "best_pct": round(best_pct, 1)})
 
+    from autoplace import metrics
     model, pcb = kicad_io.load_board(in_path)
+    before = metrics.summary(model)
     sc = _read_sidecar(in_path)
     _apply_pins(model, sc)
     # keep flagged connectors pinned to the edge they already sit on
@@ -353,7 +357,14 @@ def cmd_refine(args):
                           sides=sides, progress=progress)
     kicad_io.apply_placement(model, pcb, out_path)        # write the best placement
     stem = os.path.splitext(out_path)[0]
+    after = metrics.summary(model)
     report = {"input": in_path, "output": out_path,
+              "before": before, "after": after,
+              "hpwl_delta_pct": engine._pct(before["hpwl_mm"], after["hpwl_mm"]),
+              "crossings_delta": after["crossings"] - before["crossings"],
+              "overlaps_remaining": after["overlaps"],
+              "blocks": len({c.block for c in model.components.values()}),
+              "seed": seed, "fab": fab, "sides": sides,
               "routed_pct": round(r["best_pct"], 1), "iterations": r["iterations"],
               "history": r["history"], "routed_output": stem + ".routed.kicad_pcb"}
     if stream:
