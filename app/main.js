@@ -236,7 +236,7 @@ function runPlace(win, { board, python, strategy, seed, fab }) {
   });
 }
 
-function runPlaceMulti(win, { board, python, strategy, count, fab }) {
+function runPlaceMulti(win, { board, python, strategy, count, fab, sides }) {
   return new Promise((resolve) => {
     if (!fs.existsSync(CLI_PY)) {
       return resolve({ ok: false, error: `cli.py not found at ${CLI_PY}` });
@@ -248,6 +248,7 @@ function runPlaceMulti(win, { board, python, strategy, count, fab }) {
     const env = {
       ...process.env, AUTOPLACE_STREAM: "1",
       STRATEGY: strategy || "auto", FAB: fab || "cnc",
+      SIDES: String(sides || 2),   // gallery routed-% chips match the fab target
     };
     const args = [CLI_PY, "place-multi", board, String(n)];
     send({ type: "log", line: `$ ${python} cli.py place-multi "${board}" ${n}` });
@@ -550,11 +551,18 @@ function registerIpc(win) {
     dumpBoard(python, board)
   );
 
-  ipcMain.handle("load-connectors", (_e, { board }) => {
+  // Sidecar <stem>.autoplace.json: connectors (edge-pinned refs), locked
+  // (refs the engine must not move) and positions ({ref: [x,y]} dragged spots).
+  ipcMain.handle("load-sidecar", (_e, { board }) => {
     const p = sidecarPath(board);
     try {
       if (fs.existsSync(p)) {
-        return JSON.parse(fs.readFileSync(p, "utf8")).connectors || null;
+        const d = JSON.parse(fs.readFileSync(p, "utf8"));
+        return {
+          connectors: d.connectors || null,
+          locked: d.locked || [],
+          positions: d.positions || {},
+        };
       }
     } catch {
       /* fall through */
@@ -562,9 +570,15 @@ function registerIpc(win) {
     return null;
   });
 
-  ipcMain.handle("save-connectors", (_e, { board, connectors }) => {
+  ipcMain.handle("save-sidecar", (_e, { board, connectors, locked, positions }) => {
     try {
-      fs.writeFileSync(sidecarPath(board), JSON.stringify({ connectors }, null, 2));
+      fs.writeFileSync(
+        sidecarPath(board),
+        JSON.stringify(
+          { connectors: connectors || [], locked: locked || [], positions: positions || {} },
+          null, 2
+        )
+      );
       return true;
     } catch {
       return false;

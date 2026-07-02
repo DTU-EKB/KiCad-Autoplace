@@ -18,8 +18,8 @@ contextBridge.exposeInMainWorld("api", {
   revealPath: (p) => ipcRenderer.invoke("reveal-path", p),
   devConfig: () => ipcRenderer.invoke("dev-config"),
   dumpBoard: (opts) => ipcRenderer.invoke("dump-board", opts),
-  loadConnectors: (opts) => ipcRenderer.invoke("load-connectors", opts),
-  saveConnectors: (opts) => ipcRenderer.invoke("save-connectors", opts),
+  loadSidecar: (opts) => ipcRenderer.invoke("load-sidecar", opts),
+  saveSidecar: (opts) => ipcRenderer.invoke("save-sidecar", opts),
   // streaming events from a running placement (progress / result / log)
   onPlaceEvent: (cb) => {
     const handler = (_e, data) => cb(data);

@@ -67,8 +67,8 @@
               <div class="field mt-3">
                 <label for="sides">Routing</label>
                 <select id="sides">
-                  <option value="2" selected>Double-sided</option>
-                  <option value="1">Single-sided (bottom)</option>
+                  <option value="1" selected>Single-sided (bottom)</option>
+                  <option value="2">Double-sided</option>
                 </select>
               </div>
               <div class="field mt-3">
@@ -147,7 +147,9 @@
               </div>
             </div>
             <div class="canvas-instructions text-xs muted mb-3">
-              Left-click to toggle connector (edge placement). Drag to move footprints. Right-click to lock/unlock.
+              Left-click to toggle connector (edge placement). Drag a part to pin it in place
+              (auto-locks — the engine will not move it). Right-click to lock/unlock; unlocking
+              forgets the pinned spot.
             </div>
             <div id="boardCanvas" class="board-canvas"></div>
             <div class="board-foot mt-3">
