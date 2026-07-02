@@ -22,6 +22,13 @@
   artifact** (e.g. GND ratsnest miscount). If it's an artifact, every routed-% number in the logs is
   wrong and must be re-measured. **Verify this before trusting anything.**
 
+> **2026-07-02 UPDATE (session 2):** §4.2 CONFIRMED as a gate artifact and FIXED (commit
+> `18bdb10`); §4.4 determinism VERIFIED cross-process; §4.9 gate paths parameterized. With the
+> fixed gate the corpus routes **100% on every small board** (mppt 96.2%: one GND pad thermal
+> spokes can't reach), `system` unchanged at 98.3%. All pre-fix routed-% in this doc and the
+> session-1 log are deflated on boards with net-less pours — do not compare against them. See
+> "Session 2" in `docs/superpowers/AUTONOMOUS_SESSION_LOG.md`.
+
 ---
 
 ## 1. What the project is
@@ -90,7 +97,11 @@ prior session stopped — not because the engine is perfect, but because the cor
 improvement. **To make real progress you need boards with routing headroom** (denser/harder, or
 single-sided-*designed* boards for the laser flow). This is the first thing to fix.
 
-### 4.2 Small boards route 59–81% under BOTH human and our placement — real ceiling or harness bug?
+### 4.2 [RESOLVED 2026-07-02: harness bug] Small boards route 59–81% under BOTH human and our placement — real ceiling or harness bug?
+> It was the harness: net-less `connect_pads no` pours got grounded+filled but never touched a pad,
+> so every GND connection counted as permanently unrouted (FreeRouting skips GND — it sees a
+> plane). Fixed in `force_gnd_zones` (THERMAL pad connection on grounded pours). Corpus re-baseline:
+> all small boards 100% (mppt 96.2%), `system` 98.3% unchanged.
 Corpus baseline (our placement, seed 0, CNC netclass, 2-sided, -mp 20):
 `system 98.3 | buck 81.2 | motor_feedback 81.0 | mppt_buck 69.2 | boost 68.8 | mppt 66.7 |
 motor_power 66.1 | rectifier 65.0 | current_sense 62.2 | c2000_feedback 61.7 | drive_circuit 60.0 |
@@ -106,7 +117,10 @@ Same placement re-routed varies by ~3 nets. Multi-seed averaging (see `tools/gat
 mitigates but is expensive. **Never chase sub-3-net deltas.** Several "neutral" verdicts this session
 rest on this — a lower-noise or larger-N methodology would sharpen them.
 
-### 4.4 Determinism under concurrent load — not fully root-caused
+### 4.4 [RESOLVED 2026-07-02: verified deterministic] Determinism under concurrent load — not fully root-caused
+> Cross-process probe (PYTHONHASHSEED 0/1/42, both seed paths, aesthetic ON+OFF): all digests
+> identical. Engine has no numpy/BLAS — pure-Python floats — so CPU load cannot change placement.
+> Keep the no-concurrent-routing rule only as FreeRouting-noise hygiene.
 Early on, `motor_power` alignment counts flipped 21↔22 across separate processes under concurrent CPU
 load (multiple FreeRouting/subagents running). An in-process 5× probe (`tools/gate/determinism_probe.py`)
 showed the engine IS deterministic in-process and `PYTHONHASHSEED`-independent. The cross-process flip
