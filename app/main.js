@@ -48,6 +48,43 @@ function killTree(proc) {
   }
 }
 
+// --- Java discovery ----------------------------------------------------------
+// Refine (and finalist auto-routing) shell out to `java` via cli.py. A JRE
+// installed while the app -- or the shell that launched it -- was already
+// running is not on the inherited PATH, so hunt the standard install roots
+// and append the first hit. Append, not prepend: a java already on PATH wins.
+function augmentPathWithJava() {
+  const exe = process.platform === "win32" ? "java.exe" : "java";
+  const dirs = [];
+  if (process.env.JAVA_HOME) dirs.push(path.join(process.env.JAVA_HOME, "bin"));
+  if (process.platform === "win32") {
+    const roots = [
+      "C:\\Program Files\\Eclipse Adoptium",
+      "C:\\Program Files\\Java",
+      "C:\\Program Files\\Microsoft",
+      path.join(process.env.LOCALAPPDATA || "", "Programs", "Eclipse Adoptium"),
+    ];
+    for (const root of roots) {
+      let vers = [];
+      try {
+        vers = fs.readdirSync(root); // e.g. "jre-21.0.11.10-hotspot"
+      } catch {
+        continue;
+      }
+      // newest first, so a fresh JRE beats a stale one
+      vers.sort().reverse().forEach((v) => dirs.push(path.join(root, v, "bin")));
+    }
+  }
+  for (const d of dirs) {
+    if (fs.existsSync(path.join(d, exe))) {
+      process.env.PATH = (process.env.PATH || "") + path.delimiter + d;
+      return d;
+    }
+  }
+  return null;
+}
+augmentPathWithJava();
+
 // Is the FreeRouting toolchain present? Refine needs Java + the jar.
 const FREEROUTING_JAR = path.join(
   os.homedir(), ".freerouting", "freerouting-1.9.0.jar"
