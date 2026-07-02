@@ -252,8 +252,33 @@ netclass, -mp 20; these supersede every earlier table)
   Same config → same number, end to end. Small deltas still shouldn't be over-generalized
   (board-specific), but gate comparisons are now exactly reproducible.
 
-## Next
-User decisions needed (§4.6/§4.1): single- vs 2-sided as the primary gate target (evidence
-above favors single-sided: fab-matched + headroom); whether to add denser/harder boards; gallery
-preview/final split (§4.5). Then re-test parked ideas (sa-probabilistic-swap etc.) on the
-single-sided gate against motor_power/mppt_buck/system.
+## User decisions (2026-07-02)
+Single-sided is the PRIMARY gate (2-sided kept as non-regression check); current corpus + OVN
+suffice; commits stay on local main for user review; work order = engine gap first, then the
+user redirected to GUI.
+
+## Gated engine win: SA budget 700 -> 2800 steps/part (commit ee46e2a)
+The old gate's "motor_power is converged" verdict was an artifact-era measurement. 1-sided
+effort sweeps: motor_power 62.2/73.2/78.0/78.0 and mppt_buck 85.2/74.1/88.9/92.6 at 0.5/1/2/4x
+-> small dense boards were SEARCH-LIMITED at 700/part. Gated full-corpus: 1-sided +15 routed
+nets, NO board regressed (mppt_buck 74.1->92.6 — now beats the human 85.2; motor_feedback
+82.4->94.1; mppt 84.6->92.3; motor_power 73.2->74.4; system identical (capped, placement
+unchanged — doubles as a determinism check)). 2-sided: all 100% except system 98.3; mppt healed
+96.2->100. Note: SA outcome is not monotonic in steps (motor_power's 81200-step sweep point
+routed 64/82, the 90000-step canonical routes 61/82) — do not overfit specific step counts.
+Human gap remaining (1-sided): motor_power −3 nets; system we WIN +10; mppt_buck we WIN +2.
+
+## GUI session (user-directed): three app changes (commits fc2fdeb, 883b2ba)
+1. **Pins are real now**: the canvas drag/lock UI previously never reached the engine (sidecar
+   carried only connectors). Sidecar now stores `locked` + `positions`; new pure
+   `autoplace/sidecar.py` applies them in cli place/place-multi/refine. Drag auto-locks; unlock
+   forgets the spot; board-file-locked parts are immutable in-app. Verified end-to-end (pin ->
+   place -> output board at pinned coords, 0 overlaps).
+2. **Gallery routed-% chips honor the Routing side select** (SIDES was never passed to
+   place-multi) and the select now defaults to single-sided (both fab profiles are one-sided
+   etch processes; single-sided is the decided target).
+3. **Gallery places candidates in parallel**: byte-identical to serial (only safe because of
+   the hashseed fix), 130.6s -> 30.9s for 6 candidates on motor_power (4.2x) — faster than the
+   pre-SA-raise serial gallery, so §4.5's preview/final split is unnecessary. PLACE_PARALLEL=0
+   reverts. Caveat: renderer changes are cli-verified + syntax-checked but not yet clicked
+   through in the running app.
