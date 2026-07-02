@@ -24,6 +24,8 @@ trust sub-3-net deltas. ⚠️ **Don't run heavy placement concurrently with a r
 | `tall_measure.py` | Tall-part clearance halo ON/OFF. |
 | `block_scan.py` / `anchor_diag.py` | Block/sheet structure + floorplan order diagnostics (remember to call `blocks.detect_blocks` first!). |
 
-All scripts run from the repo root (they `sys.path.insert(0, "plugin/plugins")`). Paths to the JAR are
-hardcoded; parameterize before using on another machine. See `docs/HANDOFF.md` §3–§4 for methodology,
+All scripts run from the repo root (they `sys.path.insert(0, "plugin/plugins")`). The routing scripts
+take env overrides: `FREEROUTING_JAR` (default `%USERPROFILE%\.freerouting\freerouting-1.9.0.jar`),
+`GATE_PASSES` (default 20), `GATE_SIDES` (default 2; set 1 for the single-sided laser gate), and
+`GATE_FAB` (route_baseline only, default `cnc`). See `docs/HANDOFF.md` §3–§4 for methodology,
 gotchas, and the open questions these gates should help answer.

@@ -18,10 +18,11 @@ import pcbnew  # noqa: E402
 from autoplace import engine, fabrication, kicad_io, routing  # noqa: E402
 from autoplace import strip as strip_mod  # noqa: E402
 
-JAR = os.path.expandvars(r"%USERPROFILE%\.freerouting\freerouting-1.9.0.jar")
-PASSES = 20
-FAB = "cnc"
-SIDES = 2
+JAR = os.path.expandvars(
+    os.environ.get("FREEROUTING_JAR", r"%USERPROFILE%\.freerouting\freerouting-1.9.0.jar"))
+PASSES = int(os.environ.get("GATE_PASSES", "20"))
+FAB = os.environ.get("GATE_FAB", "cnc")
+SIDES = int(os.environ.get("GATE_SIDES", "2"))
 
 scratch = sys.argv[1]
 boards = sys.argv[2:]
