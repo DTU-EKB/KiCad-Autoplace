@@ -65,6 +65,16 @@ def test_same_seed_deterministic():
     assert _geom(a) == _geom(b)
 
 
+def test_parallel_matches_serial():
+    """parallel=True must produce byte-identical candidates (any yield order)."""
+    serial = {c["seed"]: c for c in multiseed.run_candidates(_board(), 3)}
+    par = {c["seed"]: c for c in
+           multiseed.run_candidates(_board(), 3, parallel=True)}
+    assert set(par) == set(serial) == {0, 1, 2}
+    for seed in serial:
+        assert par[seed] == serial[seed]
+
+
 def test_bad_seed_does_not_abort(monkeypatch):
     from autoplace import engine
     real_place = engine.place
