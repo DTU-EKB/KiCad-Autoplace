@@ -207,18 +207,53 @@ denominator on motor_power; their re-test needs the new headroom gate. OVN is NO
 zone is net-GND with default thermal connect) — the +13pt import-vs-ours win stands, and at 70%
 OVN is the one known board with genuine 2-sided headroom.
 
-## Determinism (HANDOFF §4.4 RESOLVED)
-Cross-process probe: PYTHONHASHSEED ∈ {0, 1, 42}, three separate processes, boards covering both
-seed paths (feedback_circuit, motor_power flat; system hierarchical), aesthetic ON+OFF — **all
-digests identical**. The engine also contains no numpy/BLAS (pure-Python floats), so concurrent
-CPU load cannot alter placement results. The historical 21↔22 alignment flip cannot have been
-engine placement math; keep the "no heavy jobs during a gate route" rule only as FreeRouting-noise
-hygiene. `determinism_probe.py` gained PROBE_N for cheap cross-process runs.
+## Determinism (HANDOFF §4.4 — root-caused and FIXED, after a false all-clear)
+First pass: PYTHONHASHSEED ∈ {0, 1, 42} cross-process probe — all digests identical → declared
+verified. **That was sampling luck.** Same-seed placements later diverged between gate flows
+(motor_power file digests 07a98… vs 5b1fb…, both internally reproducible), and wider sampling
+showed ~25% of random hash seeds produce a second stable layout (seeds 4/6/9/10 of 1–10).
+Stage-bisect (blocks → seed → anneal): divergence enters in **anneal**. Root cause:
+`local_cost` iterated a **set of net-name strings** to sum per-net HPWL — hash randomization
+changes the iteration order, the float sum's last ulp differs, one SA accept flips, and the
+trajectory cascades to a different layout. Load/BLAS were never involved (engine is numpy-free);
+the historical 21↔22 flip was this lottery. Fix (commit `bed1ff2`): `sorted(nets)` — canonical
+summation order. Regression test `tests/test_determinism.py` replays a synthetic dense board in
+subprocesses under hashseeds 1–6 (RED before fix: seed 2 diverged; GREEN after). motor_power
+verified identical across hashseeds 1–10 (be991794e9a5). 113 tests green.
+**Methodology lesson:** in-process repeat probes cannot catch this class; determinism claims need
+many-hash-seed cross-process sampling (the regression test now does this on every pytest run).
+`determinism_probe.py` gained PROBE_N for cheap cross-process runs.
+**Consequence: every routed-% measured before this fix sampled the lottery** — the canonical
+(post-fix) corpus baselines below supersede all earlier tables.
 
 ## Hygiene
 `tools/gate` scripts now take FREEROUTING_JAR / GATE_PASSES / GATE_SIDES / GATE_FAB env overrides
 (HANDOFF §4.9 done). GATE_SIDES=1 is the single-sided laser gate lever.
 
+## CANONICAL corpus baselines (post-fixes: deterministic engine + honest gate; seed 0, CNC
+netclass, -mp 20; these supersede every earlier table)
+| board | 2-sided | 1-sided | | board | 2-sided | 1-sided |
+|---|---|---|---|---|---|---|
+| system | 98.3 (176/179) | **63.1** | | mppt | 96.2 | 84.6 |
+| motor_power | 100.0 | **73.2** | | motor_feedback | 100.0 | 82.4 |
+| mppt_buck | 100.0 | **74.1** | | drive_circuit | 100.0 | 88.9 |
+| c2000_feedback | 98.0 | 82.7 | | feedback_circuit | 100.0 | 92.3 |
+| current_sense | 100.0 | 87.0 | | rectifier/boost/buck | 100.0 | 100.0 |
+
+- **2-sided: saturated** (nothing below 96%) — no discrimination power for engine changes.
+- **1-sided: the headroom gate** (63–100%, mean ~86%) — and it matches the actual laser fab.
+- Human-vs-ours, 1-sided (human = original positions, designed for 2-layer; ours = canonical):
+  system human 57.5 vs ours **63.1** (+10 nets us); motor_power human **78.0** vs ours 73.2
+  (−4); mppt_buck human **85.2** vs ours 74.1 (−3); c2000 human 78.0 vs ours **82.7** (+2..5).
+  We beat the human on the big hierarchical board, lose moderately on two dense power boards —
+  the first real, measurable engine-improvement targets since the corpus saturated.
+- **Noise model changed:** same DSN re-routed 3× → bit-identical results (motor_power 1-sided).
+  The historical "±3-net FreeRouting noise" was mostly the placement hash-lottery, now fixed.
+  Same config → same number, end to end. Small deltas still shouldn't be over-generalized
+  (board-specific), but gate comparisons are now exactly reproducible.
+
 ## Next
-Single-sided (GATE_SIDES=1) corpus baseline running — the fab-matched gate and the headroom
-candidate. Then: user decision on single- vs 2-sided target (§4.6) + headroom boards (§4.1).
+User decisions needed (§4.6/§4.1): single- vs 2-sided as the primary gate target (evidence
+above favors single-sided: fab-matched + headroom); whether to add denser/harder boards; gallery
+preview/final split (§4.5). Then re-test parked ideas (sa-probabilistic-swap etc.) on the
+single-sided gate against motor_power/mppt_buck/system.

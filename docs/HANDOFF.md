@@ -117,10 +117,16 @@ Same placement re-routed varies by ~3 nets. Multi-seed averaging (see `tools/gat
 mitigates but is expensive. **Never chase sub-3-net deltas.** Several "neutral" verdicts this session
 rest on this — a lower-noise or larger-N methodology would sharpen them.
 
-### 4.4 [RESOLVED 2026-07-02: verified deterministic] Determinism under concurrent load — not fully root-caused
-> Cross-process probe (PYTHONHASHSEED 0/1/42, both seed paths, aesthetic ON+OFF): all digests
-> identical. Engine has no numpy/BLAS — pure-Python floats — so CPU load cannot change placement.
-> Keep the no-concurrent-routing rule only as FreeRouting-noise hygiene.
+### 4.4 [RESOLVED 2026-07-02: root-caused and FIXED] Determinism under concurrent load — not fully root-caused
+> Root cause found (commit `bed1ff2`): `anneal.local_cost` iterated a **set of net-name strings**
+> when summing per-net HPWL, so float accumulation order followed hash randomization — a last-ulp
+> difference flips one SA accept and cascades into a different stable layout per process
+> (motor_power: two layouts, ~75/25 odds by PYTHONHASHSEED). The historical "flip under concurrent
+> load" was this lottery, not load/BLAS. Fixed with `sorted(nets)`;
+> `tests/test_determinism.py` now replays a board under hashseeds 1–6 in subprocesses (red before
+> fix, green after); motor_power verified identical across hashseeds 1–10. Beware the earlier
+> "verified deterministic" probe conclusion — a 5-run in-process probe cannot see this class of bug,
+> and even the first cross-process probe passed by sampling luck.
 Early on, `motor_power` alignment counts flipped 21↔22 across separate processes under concurrent CPU
 load (multiple FreeRouting/subagents running). An in-process 5× probe (`tools/gate/determinism_probe.py`)
 showed the engine IS deterministic in-process and `PYTHONHASHSEED`-independent. The cross-process flip
