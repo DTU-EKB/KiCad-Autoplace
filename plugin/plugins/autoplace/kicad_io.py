@@ -167,6 +167,12 @@ def force_gnd_zones(pcb: "pcbnew.BOARD") -> dict:
     pours -- the laser flow's zones -- are assigned to the ground net. Zones on a
     disabled copper layer (e.g. B.Cu after single-sided ``SetCopperLayerCount(1)``)
     are skipped.
+
+    Grounded pours also get thermal-relief pad connection when they ship with
+    ``connect_pads no``: a pour whose fill never touches its pads connects
+    nothing -- KiCad counts every GND pad as unrouted ratsnest (deflating any
+    routed-% built on it) and the etched plane is physically floating. Zones
+    that already carry a net keep the designer's pad-connection setting.
     """
     gnd = find_gnd_net(pcb)
     enabled = pcb.GetEnabledLayers()
@@ -179,6 +185,8 @@ def force_gnd_zones(pcb: "pcbnew.BOARD") -> dict:
             continue
         if z.GetNetCode() == 0 and gnd is not None:
             z.SetNet(gnd)
+            if z.GetPadConnection() == pcbnew.ZONE_CONNECTION_NONE:
+                z.SetPadConnection(pcbnew.ZONE_CONNECTION_THERMAL)
             grounded.extend(layers)
         filled.extend(layers)
     if filled:
