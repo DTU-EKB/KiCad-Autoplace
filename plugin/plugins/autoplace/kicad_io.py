@@ -214,9 +214,12 @@ def tracks_to_dicts(pcb: "pcbnew.BOARD") -> list:
     for t in pcb.GetTracks():
         if t.GetClass() == "PCB_VIA":
             p = t.GetPosition()
+            # KiCad 10 vias are padstacks: GetWidth() without a layer trips a
+            # wx assert dialog that blocks the preview. Through-vias (all
+            # FreeRouting emits) are uniform, so F.Cu is the diameter.
             out.append({"kind": "via",
                         "x": pcbnew.ToMM(p.x), "y": pcbnew.ToMM(p.y),
-                        "d": pcbnew.ToMM(t.GetWidth())})
+                        "d": pcbnew.ToMM(t.GetWidth(pcbnew.F_Cu))})
         else:                                   # PCB_TRACK / PCB_ARC
             s, e = t.GetStart(), t.GetEnd()
             out.append({"kind": "seg",
