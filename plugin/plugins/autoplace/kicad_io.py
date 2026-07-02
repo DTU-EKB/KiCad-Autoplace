@@ -199,3 +199,29 @@ def apply_placement(board: Board, pcb: "pcbnew.BOARD", out_path: str):
     apply_to_board(board, pcb)
     force_gnd_zones(pcb)
     pcbnew.SaveBoard(out_path, pcb)
+
+
+def tracks_to_dicts(pcb: "pcbnew.BOARD") -> list:
+    """Serialize the board's routing (segments, vias, arcs) for the app canvas.
+
+    mm coordinates in board space (same space as the model's footprint centres).
+    Arcs are flattened to straight start->end segments -- good enough for a
+    preview thumbnail (FreeRouting output is segments + vias anyway). Only works
+    on a freshly loaded board: ``GetTracks()`` is not iterable on a board that
+    just did ``ImportSpecctraSES`` (KiCad 10 SWIG quirk), so load from disk first.
+    """
+    out = []
+    for t in pcb.GetTracks():
+        if t.GetClass() == "PCB_VIA":
+            p = t.GetPosition()
+            out.append({"kind": "via",
+                        "x": pcbnew.ToMM(p.x), "y": pcbnew.ToMM(p.y),
+                        "d": pcbnew.ToMM(t.GetWidth())})
+        else:                                   # PCB_TRACK / PCB_ARC
+            s, e = t.GetStart(), t.GetEnd()
+            out.append({"kind": "seg",
+                        "layer": pcb.GetLayerName(t.GetLayer()),
+                        "x1": pcbnew.ToMM(s.x), "y1": pcbnew.ToMM(s.y),
+                        "x2": pcbnew.ToMM(e.x), "y2": pcbnew.ToMM(e.y),
+                        "w": pcbnew.ToMM(t.GetWidth())})
+    return out
