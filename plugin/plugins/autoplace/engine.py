@@ -87,6 +87,19 @@ def place(board: Board, *, seed: int = 0, grid: float = 0.5, margin: float = 0.8
 
     if connectors:
         edge_mod.assign_edges(board, connectors, margin=margin)
+    elif connectors is None:
+        # No explicit connector set (CLI/benchmark/no-sidecar app run): pin the
+        # J-prefixed connectors to their nearest-partner edge by default. On the
+        # fabricated new_system reference every human-placed connector sits
+        # 6.5-12 mm from an edge while the un-pinned engine left them up to
+        # 64 mm deep in the board -- and the worst per-net wirelength regressions
+        # (LOAD, STORE, 3PH_V, ADC_*, OPTO_A) were exactly the connector nets.
+        # J-refs only: the footprint-based guess also catches test points and
+        # terminal-block inductors (L201), which must stay free.
+        auto = [c.ref for c in board.components.values()
+                if c.ref.startswith("J") and c.is_connector and not c.locked]
+        if auto:
+            edge_mod.assign_edges(board, auto, margin=margin)
 
     if sa_steps:
         # anneal reports 0..1 over its loop; map it onto the 0.15..0.92 band.
