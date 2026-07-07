@@ -26,6 +26,31 @@ finished `.kicad_pcb`.
 - **Pre-run checklist** — flags a missing outline, ground net, or pours before you
   run.
 
+## Screenshots
+
+**The app** — load a board, generate and score placement candidates, refine, and route:
+
+![App: board loaded, pre-run check passed](docs/Images/DTU-EKB_GUI.png)
+
+![Generated placement candidates, scored by wirelength and crossings](docs/Images/Generated_candidates.png)
+
+![Route-driven refinement in progress](docs/Images/Refining_in_progress.png)
+
+![Results: wirelength, net crossings, and overlaps after placement](docs/Images/after_run_Autoplacement.png)
+
+![Routed board rendered in-app after refinement](docs/Images/after_refining.png)
+
+**A real board, start to finish** — raw import, auto-placed and routed, then fabricated:
+
+![Before: raw KiCad import, unplaced footprints](docs/Images/System_PCB_Before_Kicad_Autoplace.png)
+
+![Auto-placed and routed, opened in KiCad for review](docs/Images/final_refine_routed_Kicad_demo.png)
+
+![After: the exact layout that was fabricated](docs/Images/System_PCB_After_Kicad_Autoplace&Freerouting_ProducedBoard.png)
+
+![The fabricated board, front copper](docs/Images/pcb_fcu_produced.png)
+![The fabricated board, back copper](docs/Images/pcb_bcu_produced.png)
+
 ## Requirements
 
 - **KiCad 10** (the app uses its bundled `pcbnew`; auto-detected).
