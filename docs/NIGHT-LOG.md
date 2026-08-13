@@ -350,4 +350,67 @@ a silent failure.
 
 Explicitly not the goal: a general autorouter.
 
+### Answered before either finished: don't write one
+
+`tools/probe_freerouting.py` settled it with proofs rather than opinion. 38
+synthetic single-layer THT boards at the CNC profile, each **shipping a
+hand-built complete routing on one copper layer**, each verified by kicad-cli
+DRC at 0 missing and 0 clearance errors — so on 37 of them a single-sided
+routing provably exists *for that exact placement*. Families cover the
+genuinely global cases: concentric nested arcs, two-page book embeddings,
+reverse buses that must go the long way round, 1.9 mm lanes against a 1.85 mm
+minimum, multi-pin tap buses, wheels, GND-pour variants.
+
+210 routes through the engine's own `route_once(sides=1)`:
+
+| `-mp` passes | closed with 0 missing |
+|---|---|
+| 1 | 29/37 |
+| 5 | 32/37 |
+| **10** | **33/37 (89%)** |
+| 30 | 33/37 |
+| 100 | 33/37 |
+
+Above 10 passes there is **zero** further gain, and wall clock is flat at
+26–28 s regardless because JVM startup dominates. The engine's default of 10 is
+correct. Other flags (`-us global`, `-us hybrid`, `-is seq`, `-is rand`,
+`-inc`) give identical results; **`-oit 0` hangs** — never use it.
+
+The four boards it never closes miss **exactly one** connection each, at every
+setting. Real boards routed single-sided from their shipped placement miss 4 of
+13 (buck), 2 of 13 (rectifier), 7 of 23 (current_sense), 11 of 50
+(c2000_feedback) — **2 to 11× more than FreeRouting demonstrably leaves on the
+table when a solution exists.** A home-grown router would buy about one
+connection per board. Both router agents were stopped.
+
+Validity: every routed board confirmed strictly one layer with 0 vias; ratsnest
+and DRC agreed on all 210 routes; and the negative control had to be tightened
+after its first version turned out to be genuinely routable — negative controls
+need checking as hard as positive ones.
+
+---
+
+## The actual cause: footprint geometry, not routing
+
+The probe surfaced something more important than the router question.
+
+On the CNC profile a **2.54 mm pin header with 2.0 mm pads has a 0.54 mm
+pad-to-pad gap** — below the 0.85 mm minimum clearance. It produced **28 DRC
+clearance errors on a board whose routing was otherwise perfect**. The board was
+unmanufacturable for footprint reasons alone, with no routing involved.
+
+And passing a 1.0 mm track between two 2.0 mm pads needs **4.7 mm** centre to
+centre, so no track can ever pass between adjacent header pins. **A component's
+pad row is a wall copper cannot cross.**
+
+That makes `planarity.forced_bridges` optimistic in a specific, fixable way: it
+contracts each part to a *point*, so it believes copper passes freely through a
+footprint. This is the leading suspect for boards the census calls "0 forced
+bridges" that still refuse to route single-sided. `padblock.py` already computes
+which gaps are genuinely impassable; the model needs to use it.
+
+In progress: a pad-accurate feasibility model to compare against the point
+model, plus a footprint clearance audit that flags parts which will fail DRC
+regardless of placement.
+
 ---
