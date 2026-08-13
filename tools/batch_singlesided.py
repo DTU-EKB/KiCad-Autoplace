@@ -39,11 +39,18 @@ def _sidecar(path):
 
 
 def route_seed(in_path, workdir, tag, seed, jar, passes, fab, connectors):
-    """Place at one seed, route single-sided, bridge the rest. Never raises."""
+    """Place at one seed, route single-sided, bridge the rest. Never raises.
+
+    STRATEGY and CROSS_WEIGHT select the placement being measured, so the same
+    harness produces the baseline and every variant tried against it.
+    """
     margin, track = fabrication.margin_for(fab), fabrication.track_for(fab)
+    strategy = os.environ.get("STRATEGY", "auto")
+    cross_weight = float(os.environ.get("CROSS_WEIGHT", "0"))
     model, pcb = kicad_io.load_board(in_path)
     cand = copy.deepcopy(model)
-    engine.place(cand, seed=seed, connectors=connectors, margin=margin, track=track)
+    engine.place(cand, seed=seed, connectors=connectors, margin=margin, track=track,
+                 strategy=strategy, cross_weight=cross_weight)
     est = globalroute.analyse(cand, track=track, clearance=margin)
     row = {"seed": seed, "hpwl_mm": round(metrics.hpwl(cand), 2),
            "crossings": metrics.crossings(cand),
