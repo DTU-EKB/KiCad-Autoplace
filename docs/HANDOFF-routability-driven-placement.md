@@ -299,6 +299,14 @@ records predictions + ground truth + the full placement geometry) and
 variant, per board, with bootstrap CIs). Routing is the expensive half and is
 done once; predictor tuning is offline and instant.
 
+**The validation board set** is the DTU energy-systems repo at
+`C:\Users\Mads2\DTU\4. Semester\Electrical Energy Systems\team\hardware\kicad\boards`
+— 15 projects, all 100% through-hole with a ground pour and a real Edge.Cuts
+outline, from 10 to 131 parts (`tools/bench.py` already lists them). Use several.
+One board and 16 seeds gave a confident wrong answer twice in this study.
+(`Documents/Projects/Projects/DTU Multimeter` is *not* usable — it has no board
+outline, so it reads back as a 0×0 board.)
+
 ### What the study *did* pay for
 
 **`ranking.candidate_key` was ranking candidates at rho 0.01 — no better than
