@@ -51,6 +51,13 @@ def route_seed(in_path, workdir, tag, seed, jar, passes, fab, connectors):
     cand = copy.deepcopy(model)
     engine.place(cand, seed=seed, connectors=connectors, margin=margin, track=track,
                  strategy=strategy, cross_weight=cross_weight)
+    if os.environ.get("ORIENT") == "1":
+        # Orientation-only pass: rotates parts to uncross nets without moving
+        # anything, so it runs after placement is final. Env-gated because it
+        # has not passed a routed gate yet -- predicted bridges improved on
+        # 33/36 seeds, but predicted is not routed.
+        from autoplace import orient
+        orient.optimise(cand, margin=margin)
     est = globalroute.analyse(cand, track=track, clearance=margin)
     row = {"seed": seed, "hpwl_mm": round(metrics.hpwl(cand), 2),
            "crossings": metrics.crossings(cand),
