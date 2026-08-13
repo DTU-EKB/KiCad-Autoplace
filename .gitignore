@@ -9,3 +9,13 @@ dist/
 !releases/*.zip
 .pytest_cache/
 .venv/
+
+# gallery / router scratch: regenerable outputs of place-multi, refine and the
+# completion ladder. They land in the CWD the app runs from, which is the repo
+# root when it is started from source.
+_placemulti_cand*
+*.routed.kicad_pcb
+*.routed.kicad_pro
+*.refined.kicad_pcb
+*_s2.dsn
+*_s2.ses
