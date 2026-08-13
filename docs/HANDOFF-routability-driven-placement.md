@@ -91,16 +91,44 @@ would have been ranking noise.
 
 ### Measured result on the test board
 
+> **Superseded — these numbers were produced by the broken DRC parser.** Every
+> "missing" count below is under-reported, and the final `100% (0 missing)`
+> line is wrong: that board has **10 missing connections**. See the corrected
+> run underneath.
+
 ```
 route:  84.7% (9 missing)
 place:  81.4% (11 missing)   -> worse, escalated correctly
 grow:   86.4% (8 missing)
 bridge: 94.9% (3 missing, 5 bridges)
-bridge: 100%  (0 missing)     <- confirmed by DRC on the output board
+bridge: 100%  (0 missing)     <- NOT confirmed; the parser was dropping entries
 ```
 
-**5 wire bridges** on a 38-part single-sided board. That is a reasonable answer,
-not a failure: an arbitrary netlist is essentially never planar.
+Re-measured 2026-08-13 (later session) with the parser fixed and the growth
+livelock bounded:
+
+```
+route:  57.6% (25 missing)
+place:  67.8% (19 missing)
+place:  65.5% (20 missing)   -> no better, escalating
+grow:   71.2% (17 missing)   +20mm
+grow:   59.3% (24 missing)   -> no better, reverted
+grow:   71.2% (17 missing)   -> no better, reverted
+grow:   66.1% (20 missing)   -> no better, reverted
+bridge: 10 bridges, 1 via, 7 still missing
+bridge: 94.9% (3 missing)    <- unrestricted two-layer fallback
+```
+
+Final: **not complete** — 94.9%, 3 missing (`/V12` ×1, `/INV_IN` ×2), 10
+bridges, +10 mm of growth, board 133.8 × 120.1 mm. Independently confirmed by
+`kicad-cli pcb drc --refill-zones`: 3 missing, exactly what the tool reports.
+
+The board is harder than the tool used to admit; it did not get worse, it
+stopped lying. Reaching 100% on it is real outstanding work — and note the
+placer's own gallery can find placements needing far fewer bridges than the
+escalation ladder's re-anneal does (subxo seeds routed at 4–13 missing before
+bridging, vs 25 for the board's original placement), so feeding `complete` a
+gallery-ranked starting placement is the obvious cheap win.
 
 ---
 
