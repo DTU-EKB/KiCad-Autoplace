@@ -44,6 +44,7 @@ def complete(board, pcb, *, jar, work_pcb, passes=20, seed=0, sides=1,
     from . import kicad_io
     from . import outline as outline_mod
     from . import routing
+    from . import unrouted as unrouted_mod
 
     history: list[completion.Attempt] = []
     state = completion.CompletionState(pct=0.0, missing=1)
@@ -64,7 +65,18 @@ def complete(board, pcb, *, jar, work_pcb, passes=20, seed=0, sides=1,
         r = routing.route_once(work_pcb, jar, passes, sides=sides)
         totals["n"] = max(1, r["total"])
         field = cong_mod.parse(r["ses_path"], model, cell_mm=5.0)
-        return r["pct"], r["unrouted"], r["routed_pcb"], field
+        # pcbnew's ratsnest count is computed on the pour as saved; KiCad's own
+        # DRC refills zones first and routinely finds FEWER missing connections.
+        # Measured on a finished board: ratsnest said 2 missing, DRC said 0 --
+        # the board was complete and the tool could not tell. Trust DRC when it
+        # is available, fall back to the ratsnest when it is not.
+        missing = r["unrouted"]
+        try:
+            missing = len(unrouted_mod.analyse(r["routed_pcb"])["missing"])
+        except RuntimeError:
+            pass
+        pct = 100.0 * (totals["n"] - missing) / totals["n"]
+        return pct, missing, r["routed_pcb"], field
 
     def pct_of(missing):
         """Completion for a board we did not re-route through route_once."""

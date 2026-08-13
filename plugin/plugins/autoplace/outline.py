@@ -32,8 +32,11 @@ def grow_rect(rect, mm: float, *, anchor: str = "centre"):
     the stock is registered against a jig corner.
     """
     x0, y0, x1, y1 = rect
-    if mm <= 0:
+    if mm == 0:
         return (x0, y0, x1, y1)
+    # Negative mm SHRINKS: completer reverts a growth that bought nothing by
+    # calling this with -step. Refusing negatives made the revert a silent no-op,
+    # so the cap never tripped and a 100 mm board grew to 160 mm.
     if anchor == "corner":
         return (x0, y0, x1 + 2 * mm, y1 + 2 * mm)
     return (x0 - mm, y0 - mm, x1 + mm, y1 + mm)
