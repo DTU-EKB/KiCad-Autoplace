@@ -63,16 +63,6 @@ def tiebreak_key(cand: dict) -> tuple:
     )
 
 
-def candidate_key(cand: dict) -> tuple:
-    """Per-candidate key WITHOUT population context.
-
-    Kept for callers that need to order a single candidate against a fixed
-    reference. It cannot express the crossings/HPWL rank-sum, which needs the
-    whole population, so ``pre_rank`` is what the gallery uses.
-    """
-    return (cand["overlaps"], round(cand.get("hpwl_mm", 0.0), 2)) + tiebreak_key(cand)
-
-
 def pre_rank(candidates: list[dict]) -> list[dict]:
     """All candidates, best first.
 
