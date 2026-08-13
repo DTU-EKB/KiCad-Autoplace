@@ -161,8 +161,11 @@ def cmd_place_multi(args):
     connectors = sc.get("connectors")
     _apply_pins(model, sc)      # candidates deepcopy the model -> pins inherited
     buf = []
+    # "crossings" is load-bearing, not decoration: it and hpwl_mm are the two
+    # terms ranking.pre_rank scores routability on. Leaving it out of this tuple
+    # silently drops the gallery back to HPWL-only ranking.
     keys = ("seed", "overlaps", "sheet_spread_score", "pinch_fraction",
-            "whitespace_connectivity", "decap_proximity", "hpwl_mm")
+            "whitespace_connectivity", "decap_proximity", "hpwl_mm", "crossings")
     # Parallel by default: candidates are pure functions of (model, seed), so
     # worker processes return byte-identical results, in completion order (the
     # app keys cards by seed). PLACE_PARALLEL=0 forces the serial path.
