@@ -132,3 +132,37 @@ every one of six placements needed at least one. Nothing about the circuit
 requires it.
 
 ---
+
+## Topology seeding: negative on the proxy, positive on the routed truth
+
+Crossings of the MST net trees, current engine vs embedding seed
+(`tools/eval_topoplace.py`, 4 seeds):
+
+| board | engine | topo seed | topo + anneal |
+|---|---|---|---|
+| boost | 1..8 | 12 | 2..5 |
+| mppt_buck | 5..11 | 17 | 4..9 |
+| buck_v2 | 7..17 | 11 | 18..26 |
+| motor_power | 38..56 | **23** | 31..70 |
+| subxo | 34..55 | 67 | 38..52 |
+
+On this yardstick topology seeding is **not** an improvement — only motor_power
+clearly gains. Recorded as a negative result, because it is one.
+
+But the yardstick is measuring the wrong graph (see the trap above), so it does
+not settle anything. The routed comparison does, and the first result points the
+other way:
+
+> **`boost`, routed single-sided for real: the embedding seed closed it with 0
+> bridges. No baseline placement did — best of six was 1.**
+
+So a placement that looks *worse* on MST crossings routed *better*. That is a
+warning about the proxy as much as a result about the seed: MST crossings were
+the best cheap predictor available (Spearman 0.61), and they still mis-rank a
+placement built on a different net topology.
+
+Verdict deferred until the full routed sweep lands. Nothing about topology
+seeding is on by default: `strategy="auto"` and `cross_weight=0.0` remain the
+shipped behaviour.
+
+---
