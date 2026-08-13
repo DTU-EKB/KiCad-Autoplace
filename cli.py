@@ -213,6 +213,66 @@ def cmd_place_multi(args):
     return 0
 
 
+def cmd_complete(args):
+    """Drive a board to 100% connectivity: re-place -> grow outline -> bridge.
+
+      cli.py complete BOARD.kicad_pcb [OUT.kicad_pcb] [seed]
+
+    Unlike ``refine``, which gives up when re-annealing stops helping, this
+    escalates: it keeps the board inside the outline while placement is still
+    buying improvement, grows the outline in bounded steps only when it is not,
+    and finally closes the residual connections as counted wire bridges. A
+    single-sided board is rarely planar, so the bridges are usually what gets it
+    to 100% -- they are reported, never hidden.
+
+    Env: FAB (cnc|laser), SIDES (1|2), MAX_GROWTH_MM, GROWTH_STEP_MM,
+    ALLOW_GROWTH / ALLOW_BRIDGES (0 to forbid), PLACE_BUDGET, FREEROUTING_JAR.
+    """
+    from autoplace import completer, fabrication
+    in_path = args[0]
+    out_path = args[1] if len(args) > 1 else _default_out(in_path)
+    seed = int(args[2]) if len(args) > 2 else 0
+    fab = _fab()
+    jar = os.environ.get("FREEROUTING_JAR", DEFAULT_JAR)
+    sides = int(os.environ.get("SIDES", "1"))
+    stream = os.environ.get("AUTOPLACE_STREAM") == "1"
+
+    def emit(obj):
+        sys.stdout.write(json.dumps(obj) + "\n")
+        sys.stdout.flush()
+
+    progress = None
+    if stream:
+        def progress(stage, msg):
+            emit({"type": "progress", "stage": stage, "detail": msg})
+
+    model, pcb = kicad_io.load_board(in_path)
+    sc = _read_sidecar(in_path)
+    _apply_pins(model, sc)
+    for ref in (sc.get("connectors") or []):
+        c = model.components.get(ref)
+        if c is not None and not c.locked:
+            c.is_connector = True
+    kicad_io.copy_project(in_path, out_path)
+    _apply_fab(out_path, fab)
+
+    res = completer.complete(
+        model, pcb, jar=jar, work_pcb=out_path, seed=seed, sides=sides,
+        place_budget=int(os.environ.get("PLACE_BUDGET", "3")),
+        max_growth_mm=float(os.environ.get("MAX_GROWTH_MM", "20")),
+        growth_step_mm=float(os.environ.get("GROWTH_STEP_MM", "5")),
+        allow_growth=os.environ.get("ALLOW_GROWTH", "1") != "0",
+        allow_bridges=os.environ.get("ALLOW_BRIDGES", "1") != "0",
+        place_margin=fabrication.margin_for(fab), progress=progress)
+    res["input"], res["fab"], res["sides"] = in_path, fab, sides
+    if stream:
+        res["type"] = "result"
+        emit(res)
+    else:
+        print(json.dumps(res, indent=2))
+    return 0 if res.get("complete") else 1
+
+
 def cmd_finalize(args):
     """Promote a finished board to the project's main .kicad_pcb and sweep temps.
 
@@ -388,6 +448,7 @@ def _refine_out(in_path):
 def main(argv):
     cmds = {"place": cmd_place, "place-multi": cmd_place_multi,
             "metrics": cmd_metrics, "dump": cmd_dump, "refine": cmd_refine,
+            "complete": cmd_complete,
             "finalize": cmd_finalize, "preflight": cmd_preflight}
     if len(argv) < 2 or argv[1] not in cmds:
         print(__doc__)

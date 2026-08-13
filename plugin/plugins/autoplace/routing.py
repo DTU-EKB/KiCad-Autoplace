@@ -52,6 +52,120 @@ def _flip_to_bottom(routed_pcb: str) -> None:
     pcbnew.SaveBoard(routed_pcb, b)
 
 
+def _track_sig(t):
+    """Identity of a track, stable across a save/load round-trip."""
+    s, e = t.GetStart(), t.GetEnd()
+    return (t.GetClass(), s.x, s.y, e.x, e.y, t.GetWidth(), t.GetLayer(),
+            t.GetNetCode())
+
+
+def route_stage2_bridges(routed_pcb: str, jar: str, passes: int,
+                         stem: str = None, timeout: int = 1800) -> dict:
+    """Second stage: finish an incomplete single-sided board with wire bridges.
+
+    An arbitrary netlist is almost never planar, so a genuinely single-sided
+    board cannot reach 100% by routing alone -- what a person does is finish the
+    last few connections as wire links on the component side. This does that
+    deliberately instead of handing back unrouted nets: stage-1 copper is
+    **locked** so FreeRouting cannot rip it up, the second layer is enabled, and
+    the router is asked to close only what is left. Whatever lands on F.Cu is a
+    bridge to solder, and it is counted and reported rather than hidden.
+
+    Two traps, both learned from the laser pipeline and both handled:
+
+    * FreeRouting does **not** re-emit fixed wires in its session file, so a raw
+      SES import deletes the stage-1 copper. We snapshot the tracks first and
+      re-add whatever the import dropped.
+    * On KiCad 10 ``GetTracks()`` is not iterable after ``ImportSpecctraSES``, so
+      the comparison is done on a freshly loaded copy rather than in-process.
+    """
+    if stem is None:
+        stem = os.path.splitext(routed_pcb)[0] + "_s2"
+    board = pcbnew.LoadBoard(routed_pcb)
+    board.SetCopperLayerCount(2)                 # F.Cu becomes the bridge layer
+    for t in board.GetTracks():
+        t.SetLocked(True)                        # exported as (type fix)
+    force_gnd_zones(board)
+    before = [(_track_sig(t), t.Duplicate()) for t in board.GetTracks()]
+
+    dsn, ses = stem + ".dsn", stem + ".ses"
+    if not pcbnew.ExportSpecctraDSN(board, dsn):
+        raise RuntimeError("stage-2 DSN export failed")
+    if os.path.exists(ses):
+        os.remove(ses)
+    t0 = time.time()
+    proc = subprocess.run(["java", "-jar", jar, "-de", dsn, "-do", ses,
+                           "-mp", str(passes)],
+                          capture_output=True, text=True, timeout=timeout)
+    dt = time.time() - t0
+    if not os.path.exists(ses) or os.path.getsize(ses) == 0:
+        tail = (proc.stdout or "")[-800:] + (proc.stderr or "")[-400:]
+        raise RuntimeError(f"stage-2 FreeRouting produced no SES "
+                           f"(exit {proc.returncode}).\n{tail}")
+
+    pcbnew.ImportSpecctraSES(board, ses)
+    out = stem + ".routed.kicad_pcb"
+    pcbnew.SaveBoard(out, board)
+
+    # Re-add stage-1 copper the import dropped (fresh load: iterable again).
+    fresh = pcbnew.LoadBoard(out)
+    have = {_track_sig(t) for t in fresh.GetTracks()}
+    readded = 0
+    for sig, dup in before:
+        if sig not in have:
+            fresh.Add(dup)
+            readded += 1
+    for t in fresh.GetTracks():
+        t.SetLocked(False)                       # don't leave the board locked
+    force_gnd_zones(fresh)
+    pcbnew.SaveBoard(out, fresh)
+
+    final = pcbnew.LoadBoard(out)
+    # A bridge is a WIRE the user has to solder, not a track segment. FreeRouting
+    # emits a corner as several segments, so counting segments overstates the
+    # build cost badly (26 segments for 9 connections on the first real run).
+    # Count connected runs per net instead: segments that share an endpoint are
+    # one wire.
+    f_segs = [t for t in final.GetTracks()
+              if t.GetClass() != "PCB_VIA" and t.GetLayer() == pcbnew.F_Cu]
+    bridges = _count_runs(f_segs)
+    vias = sum(1 for t in final.GetTracks() if t.GetClass() == "PCB_VIA")
+    left = unrouted_count(final)
+    return {"routed_pcb": out, "unrouted": left, "bridges": bridges,
+            "bridge_segments": len(f_segs), "vias": vias, "readded": readded,
+            "seconds": round(dt, 1)}
+
+
+def _count_runs(segs) -> int:
+    """Number of connected runs among track segments (union-find on endpoints).
+
+    Two segments belong to the same physical wire when they share an endpoint
+    and a net.
+    """
+    parent = {}
+
+    def find(k):
+        parent.setdefault(k, k)
+        while parent[k] != k:
+            parent[k] = parent[parent[k]]
+            k = parent[k]
+        return k
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    for i, t in enumerate(segs):
+        net = t.GetNetCode()
+        a = (net, t.GetStart().x, t.GetStart().y)
+        b = (net, t.GetEnd().x, t.GetEnd().y)
+        find(("seg", i))
+        union(("seg", i), a)
+        union(a, b)
+    return len({find(("seg", i)) for i in range(len(segs))})
+
+
 def route_once(pcb_path: str, jar: str, passes: int, stem: str = None,
                sides: int = 2) -> dict:
     """Load ``pcb_path`` fresh, route it once with FreeRouting, report completion.
