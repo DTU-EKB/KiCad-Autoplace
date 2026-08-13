@@ -42,6 +42,13 @@ def _flip_to_bottom(routed_pcb: str) -> None:
         z = b.GetArea(i)
         if z.IsOnLayer(pcbnew.F_Cu):
             z.SetLayer(pcbnew.B_Cu)
+    # Moving a zone to another layer invalidates its fill, and KiCad drops the
+    # filled polygons on save -- leaving an OUTLINE-ONLY pour that connects
+    # nothing. That costs twice: every GND pad reads as unrouted ratsnest
+    # (measured at 11 of 20 "unrouted" connections on a 38-part board), and the
+    # board that ships has a physically floating ground plane. Refill after the
+    # move, before saving.
+    force_gnd_zones(b)
     pcbnew.SaveBoard(routed_pcb, b)
 
 
@@ -107,12 +114,17 @@ def route_once(pcb_path: str, jar: str, passes: int, stem: str = None,
 
     pcbnew.ImportSpecctraSES(board, ses)
     force_gnd_zones(board)                      # refill the GND pour after import
-    left = unrouted_count(board)
-    routed = total - left
     routed_pcb = stem + ".routed.kicad_pcb"
     pcbnew.SaveBoard(routed_pcb, board)
     if sides == 1:
         _flip_to_bottom(routed_pcb)             # single-sided copper -> B.Cu
+        # Measure the board we actually hand back, not the pre-flip one. The flip
+        # rebuilds the pour, and connectivity is only meaningful after that; the
+        # refine loop steers on this number, so it has to describe the real file.
+        left = unrouted_count(pcbnew.LoadBoard(routed_pcb))
+    else:
+        left = unrouted_count(board)
+    routed = total - left
     return {
         "total": total, "routed": routed, "unrouted": left,
         "pct": (100.0 * routed / total if total else 100.0),
