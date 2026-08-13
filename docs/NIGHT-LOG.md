@@ -165,4 +165,26 @@ Verdict deferred until the full routed sweep lands. Nothing about topology
 seeding is on by default: `strategy="auto"` and `cross_weight=0.0` remain the
 shipped behaviour.
 
+### boost, routed per seed — the first clean win
+
+`(seed, connections still missing after the single-sided route, bridges, final)`
+
+```
+baseline  (0,1,1,0) (1,1,1,0) (2,2,2,0) (3,1,1,0) (4,1,1,0) (5,1,1,0)
+topo      (0,1,1,0) (1,0,0,0) (2,0,0,0) (3,1,1,0)
+xw50      (0,1,1,0) (1,1,1,0) (2,1,1,0) (3,1,1,0)
+```
+
+boost forces **0** bridges. The baseline never reaches that — six placements,
+six bridges. Topology seeding reaches it on **two of four** seeds: those boards
+route completely on one copper layer with nothing to hand-solder.
+
+Two things follow:
+
+* The win is qualitative and reproducible, not one lucky seed.
+* `cross_weight` on its own does nothing here (4/4 still need a bridge). Starting
+  from the right topology matters more than defending it during the anneal —
+  which is the opposite of what I expected, and worth remembering before
+  spending effort on making the anneal topology-aware.
+
 ---
