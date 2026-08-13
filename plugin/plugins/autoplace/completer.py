@@ -65,16 +65,29 @@ def complete(board, pcb, *, jar, work_pcb, passes=20, seed=0, sides=1,
         r = routing.route_once(work_pcb, jar, passes, sides=sides)
         totals["n"] = max(1, r["total"])
         field = cong_mod.parse(r["ses_path"], model, cell_mm=5.0)
-        # pcbnew's ratsnest count is computed on the pour as saved; KiCad's own
-        # DRC refills zones first and routinely finds FEWER missing connections.
-        # Measured on a finished board: ratsnest said 2 missing, DRC said 0 --
-        # the board was complete and the tool could not tell. Trust DRC when it
-        # is available, fall back to the ratsnest when it is not.
+        # DRC is the authority: it refills zones before checking, and it can name
+        # WHICH connections are missing, which the escalation needs. The ratsnest
+        # is the fallback when kicad-cli is absent.
+        #
+        # A previous version of this comment claimed DRC "routinely finds fewer
+        # missing connections than the ratsnest", and the completion metric was
+        # switched over on that basis. That was not DRC being smarter -- it was
+        # ``unrouted.parse_drc_report`` silently dropping every gap whose endpoint
+        # was a Track or a Zone rather than a pad, which is most of them on a
+        # routed board. Re-measured across 16 placements once the parser was
+        # fixed, the two agree EXACTLY (4-13 missing each). Until that fix the
+        # tool reported boards with up to 13 missing connections as 100% complete.
+        # So: if these two ever diverge again, something is broken -- do not
+        # assume the smaller number is the smarter one.
         missing = r["unrouted"]
+        ratsnest = r["unrouted"]
         try:
             missing = len(unrouted_mod.analyse(r["routed_pcb"])["missing"])
         except RuntimeError:
             pass
+        if missing != ratsnest:
+            emit("route", f"NOTE: DRC says {missing} missing, ratsnest says "
+                          f"{ratsnest} -- these should agree")
         pct = 100.0 * (totals["n"] - missing) / totals["n"]
         return pct, missing, r["routed_pcb"], field
 

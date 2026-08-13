@@ -22,6 +22,16 @@ Two things that bite, both learned the hard way and both handled here:
   GUI would suppress by design rule; ``clearance_violations`` reports them, but
   the caller must not treat them as authoritative. Missing *connections* are
   unaffected -- those are geometry, not rules.
+* **An endpoint is not always a pad.** KiCad reports the gap between the two
+  items nearest it, and on a routed board those are routinely a ``Track`` or the
+  ground ``Zone`` rather than a pad -- a half-routed net reads "Track [/VIN] on
+  B.Cu" on one side and "PTH pad 1 [/VIN] of J4" on the other. Matching pads
+  only dropped every such entry, so a board KiCad reported five missing
+  connections on came back as **zero missing**, i.e. fully routed. ``completer``
+  trusts this count over the ratsnest, so it would have called an unfinished
+  board complete -- the one thing it is written not to do. Every reported gap is
+  now counted; pad detail is still extracted where it exists, because that is
+  what placing a wire bridge needs (``is_pad_pair``).
 """
 from __future__ import annotations
 
@@ -32,12 +42,44 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 
-_ITEM_RE = re.compile(r"^(?:PTH|SMD|NPTH)?\s*pad\s+(\S+)\s+\[(.*?)\]\s+of\s+(\S+)")
+# "PTH pad 1 [/VIN] of J4", "SMD pad A2 [/CLK] of U7", "pad 2 [/GND] of R9"
+_PAD_RE = re.compile(
+    r"^(?:PTH|SMD|NPTH|Aperture)?\s*pad\s+(\S+)\s+\[(.*?)\]\s+of\s+(\S+)", re.I)
+# Anything else KiCad names with a net: "Track [/VGND] on B.Cu, length 1.8 mm",
+# "Zone [/GND] on B.Cu, priority 0", "Via [/V12] on B.Cu".
+_KIND_RE = re.compile(r"^\s*([A-Za-z]+)\b[^\[]*\[(.*?)\]")
+
+
+@dataclass(frozen=True)
+class _Item:
+    kind: str          # "pad" | "track" | "zone" | "via" | ... | "unknown"
+    ref: str           # component ref for a pad; "" otherwise
+    pad: str           # pad number for a pad; "" otherwise
+    net: str           # "" when the description names no net
+    x: float
+    y: float
+
+
+def _parse_item(it: dict) -> _Item:
+    desc = (it.get("description") or "").strip()
+    pos = it.get("pos") or {}
+    x, y = float(pos.get("x", 0.0)), float(pos.get("y", 0.0))
+    m = _PAD_RE.match(desc)
+    if m:
+        return _Item("pad", m.group(3), m.group(1), m.group(2), x, y)
+    m = _KIND_RE.match(desc)
+    if m:
+        return _Item(m.group(1).lower(), "", "", m.group(2), x, y)
+    return _Item("unknown", "", "", "", x, y)
 
 
 @dataclass(frozen=True)
 class MissingLink:
-    """One connection the router did not make."""
+    """One connection the router did not make.
+
+    ``ref``/``pad`` are filled only for endpoints that are pads; a track or zone
+    endpoint leaves them empty but still carries its position and net.
+    """
     net: str
     ref_a: str
     pad_a: str
@@ -47,36 +89,43 @@ class MissingLink:
     pad_b: str
     x_b: float
     y_b: float
+    kind_a: str = "pad"
+    kind_b: str = "pad"
 
     @property
     def length_mm(self) -> float:
         return ((self.x_a - self.x_b) ** 2 + (self.y_a - self.y_b) ** 2) ** 0.5
 
     @property
+    def is_pad_pair(self) -> bool:
+        """True when both ends are pads, i.e. a wire bridge can be placed on it."""
+        return self.kind_a == "pad" and self.kind_b == "pad"
+
+    @property
     def endpoints(self) -> tuple[str, str]:
-        return (f"{self.ref_a}.{self.pad_a}", f"{self.ref_b}.{self.pad_b}")
+        def name(kind, ref, pad, x, y):
+            return f"{ref}.{pad}" if kind == "pad" else f"{kind}@({x:.2f},{y:.2f})"
+        return (name(self.kind_a, self.ref_a, self.pad_a, self.x_a, self.y_a),
+                name(self.kind_b, self.ref_b, self.pad_b, self.x_b, self.y_b))
 
 
 def parse_drc_report(data: dict) -> list[MissingLink]:
-    """Turn a kicad-cli DRC json document into MissingLinks (pure, testable)."""
+    """Turn a kicad-cli DRC json document into MissingLinks (pure, testable).
+
+    One link per reported gap. An entry is dropped only when it names fewer than
+    two items -- never because an endpoint is a track, a zone, or a description
+    shape we do not recognise. Under-counting here reads as "board finished".
+    """
     out: list[MissingLink] = []
     for entry in data.get("unconnected_items", []):
         items = entry.get("items", [])
         if len(items) < 2:
             continue
-        parsed = []
-        for it in items[:2]:
-            m = _ITEM_RE.match((it.get("description") or "").strip())
-            pos = it.get("pos") or {}
-            if not m:
-                parsed = []
-                break
-            parsed.append((m.group(3), m.group(1), m.group(2),
-                           float(pos.get("x", 0.0)), float(pos.get("y", 0.0))))
-        if len(parsed) != 2:
-            continue
-        (ref_a, pad_a, net, xa, ya), (ref_b, pad_b, _n2, xb, yb) = parsed
-        out.append(MissingLink(net, ref_a, pad_a, xa, ya, ref_b, pad_b, xb, yb))
+        a, b = _parse_item(items[0]), _parse_item(items[1])
+        out.append(MissingLink(a.net or b.net,
+                               a.ref, a.pad, a.x, a.y,
+                               b.ref, b.pad, b.x, b.y,
+                               kind_a=a.kind, kind_b=b.kind))
     return out
 
 
