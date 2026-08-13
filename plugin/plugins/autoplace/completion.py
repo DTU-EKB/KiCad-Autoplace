@@ -59,6 +59,13 @@ class CompletionState:
     history: list[Attempt] = field(default_factory=list)
 
 
+def _max_grow_attempts(max_growth_mm: float, growth_step_mm: float) -> int:
+    """How many growth tries the size budget is worth, at minimum one step."""
+    if growth_step_mm <= 0:
+        return 0
+    return max(0, int(max_growth_mm // growth_step_mm))
+
+
 def next_action(state: CompletionState, *, place_budget: int = 3,
                 max_growth_mm: float = DEFAULT_MAX_GROWTH_MM,
                 growth_step_mm: float = DEFAULT_GROWTH_STEP_MM,
@@ -77,8 +84,19 @@ def next_action(state: CompletionState, *, place_budget: int = 3,
     if state.place_attempts < place_budget and state.improved_last:
         return "place"
     # Growing keeps the board single-sided and bridge-free, so prefer it over
-    # bridges -- but only within the cap the caller allowed.
-    if allow_growth and state.growth_mm + growth_step_mm <= max_growth_mm:
+    # bridges -- but only within the cap the caller allowed, and only for a
+    # bounded number of tries.
+    #
+    # Both bounds are load-bearing. The caller gives the millimetres back when a
+    # growth step does not help (a bigger board the user did not pay for is not
+    # a result), so ``growth_mm`` is NOT monotonic: on a board where growing
+    # never helps it returns to where it started every time, the size cap is
+    # never reached, and gating on size alone asks to grow forever. Observed as
+    # a real livelock -- ``cli.py complete`` looped on the same 133x120 -> 153x140
+    # step, reverted it, and tried again, never reaching the bridge rung.
+    if allow_growth and state.grow_attempts < _max_grow_attempts(
+            max_growth_mm, growth_step_mm) and \
+            state.growth_mm + growth_step_mm <= max_growth_mm:
         return "grow"
     # Residual crossings are genuinely non-planar: build them as bridges.
     if allow_bridges:

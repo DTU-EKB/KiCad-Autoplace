@@ -36,6 +36,33 @@ def test_growth_stops_at_the_cap_and_falls_through_to_bridging():
     assert next_action(s, max_growth_mm=20.0) == "bridge"
 
 
+def test_growth_that_keeps_being_reverted_still_terminates():
+    """Observed as a livelock in ``cli.py complete``: the caller gives the
+    millimetres back when a growth step does not help, so ``growth_mm`` never
+    advances, the millimetre cap is never reached, and the ladder asks to grow
+    forever -- never reaching the bridge rung and never returning. Attempts have
+    to be bounded, not just accumulated size."""
+    s = CompletionState(pct=71.0, missing=17, place_attempts=3,
+                        growth_mm=0.0, grow_attempts=4, improved_last=False)
+    assert next_action(s, max_growth_mm=20.0, growth_step_mm=5.0) == "bridge"
+
+
+def test_growth_attempts_are_capped_by_the_size_budget():
+    budget = {"max_growth_mm": 20.0, "growth_step_mm": 5.0}      # 4 steps
+    keep = CompletionState(pct=71.0, missing=9, place_attempts=3, grow_attempts=3)
+    assert next_action(keep, **budget) == "grow"
+    spent = CompletionState(pct=71.0, missing=9, place_attempts=3, grow_attempts=4)
+    assert next_action(spent, **budget) == "bridge"
+
+
+def test_growth_still_stops_on_the_millimetre_cap():
+    """The size budget is the real constraint; the attempt cap only guarantees
+    termination when reverts keep the size at zero."""
+    s = CompletionState(pct=96.0, missing=4, place_attempts=3, growth_mm=18.0,
+                        grow_attempts=1)
+    assert next_action(s, max_growth_mm=20.0, growth_step_mm=5.0) == "bridge"
+
+
 def test_growth_can_be_forbidden_when_the_outline_is_a_hard_constraint():
     s = CompletionState(pct=96.0, missing=4, place_attempts=3)
     assert next_action(s, allow_growth=False) == "bridge"
