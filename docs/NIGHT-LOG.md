@@ -227,3 +227,75 @@ repo has already been burned once by a metric that looked right. It is env-gated
 (`ORIENT=1`) in the batch harness and a routed gate is running.
 
 ---
+
+## A crossing test that disagreed with itself
+
+Found while reconciling two implementations of the same geometry.
+`globalroute._crosses` tested only for a *proper* crossing:
+
+```python
+return ((d1 > 0) != (d2 > 0)) and ((d3 > 0) != (d4 > 0))
+```
+
+A zero determinant reads as "negative" there, so a degenerate touch counted as
+a crossing or not **depending on which way round the two segments were
+written**. Over grid-aligned pairs, 4.6% disagreed with themselves under
+argument or endpoint reordering — and every one was a T-junction or a collinear
+overlap.
+
+Both halves matter. The order dependence made every crossing count a function
+of iteration order. And the mishandled case is the worst one on a real board: a
+zero determinant means one net's copper passes exactly through another net's
+pad — a **short** — and it was being scored as "no crossing", the most
+favourable reading available. Parts sit on a 2.54 mm grid and `aesthetic.align`
+snaps them into rows, so this is routine, not a curiosity.
+
+Now the standard orientation test with the collinear cases explicit, symmetric
+in both arguments and in each segment's endpoint order, asserted over thousands
+of grid-aligned pairs.
+
+---
+
+## Net topology: a better estimator, not yet a better board
+
+`nettopo.py` re-trees each net to minimise crossings instead of length. The
+structural insight is that with all other nets fixed, a net's crossing count is
+a plain *sum* over its tree edges, so the optimal re-tree is a single Prim run
+under `cross_mm * crossings + length` — exact at any pin count, no enumeration.
+
+Over 14 boards / 68 placements: crossings **−30.8%**, predicted bridges
+**−18.5%**, +4.2% wire, **0 placements worse**. Against 18 routed placements it
+is a measurably better *estimator* — bridge mean absolute error 3.50→2.30 and
+5.12→3.38; the MST estimate was systematically pessimistic, claiming 3–9 bridges
+on boards that force zero.
+
+But it moves no parts, so **nothing on any board is better today**. It improves
+the number the tool reports, and possibly how candidates rank (Spearman up on
+both boards, but bootstrap intervals straddle zero on 18 samples). Not wired in.
+
+---
+
+## Routed scoreboard so far
+
+Bridges the best placement of each variant actually needed, against the floor:
+
+| board | forced | base | topo | xw50 | topo+xw | orient |
+|---|---|---|---|---|---|---|
+| boost | 0 | 1 (0/6 at 0) | **0** (2/4 at 0) | 1 | **0** (1/4) | 1 |
+| mppt_buck | 0 | – | **0** (1/4) | no close | **0** (1/4) | no close |
+| current_sense | 0 | no close | no close | no close | 1 | no close |
+| buck_v2 | 0 | – | no close | no close | no close | – |
+| c2000_feedback | 0 | – | no close | no close | – | – |
+| buck / rectifier / feedback_circuit / motor_feedback / drive_circuit | 0 | 0 | – | – | – | – |
+
+**Topology seeding is the only variant that reaches the proven zero-bridge floor
+on a board the baseline cannot** — now on two of them, boost and mppt_buck.
+
+The open problem is the larger boards: buck_v2, c2000_feedback and current_sense
+force zero bridges and *no variant closes them at all*. Either FreeRouting
+cannot find single-sided routings that provably exist, or the point-model misses
+a geometric obstruction that `padblock` would see. That question decides whether
+placement work can finish the job or whether a dedicated single-layer router is
+required.
+
+---
