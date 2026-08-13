@@ -457,7 +457,11 @@ def test_fast_enough_to_run_after_every_placement():
     rep = orient.optimise(b)
     dt = time.perf_counter() - t0
     assert dt < 2.0, f"{dt * 1000:.0f} ms for {len(b.components)} parts"
-    assert rep["seconds"] <= dt + 1e-6
+    # The reported time must not exceed the elapsed time -- but it is rounded to
+    # 4 decimal places, so the tolerance has to cover that rounding. At 1e-6 this
+    # failed roughly whenever the round happened to go up (0.10470 reported
+    # against 0.104680 measured), which made the test flaky rather than strict.
+    assert rep["seconds"] <= dt + 5e-5
     assert rep["exact_bridges"] is True
 
 
