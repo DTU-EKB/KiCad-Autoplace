@@ -409,8 +409,59 @@ footprint. This is the leading suspect for boards the census calls "0 forced
 bridges" that still refuse to route single-sided. `padblock.py` already computes
 which gaps are genuinely impassable; the model needs to use it.
 
-In progress: a pad-accurate feasibility model to compare against the point
-model, plus a footprint clearance audit that flags parts which will fail DRC
-regardless of placement.
+### The pad-accurate model was built. It does not explain the failures.
+
+`escape.py` rebuilds feasibility with each part as its *ring of pads*, joined
+only across gaps `padblock` says no track fits through — so a DIP's open centre
+corridor stays open. Result: **zero forced bridges on all 15 boards, including
+all four known failures.** It does not separate them at all, and it fails in the
+opposite direction to the hypothesis.
+
+The reason is structural, not tuning. Contracting a part to a point is what
+*creates* the cycles that could be non-planar; restoring the pads leaves a
+forest, and forests are always planar:
+
+| | buck | buck_v2 | c2000 | motor_power | subxo | system |
+|---|---|---|---|---|---|---|
+| E−V, pad model | −2 | −2 | −13 | −9 | −4 | −9 |
+| E−V, point model | +2 | +9 | +3 | +18 | +12 | +39 |
+
+**It also falsifies two entries in my own census.** motor_power's "2 forced
+bridges" and system's "1" come entirely from **DO-41 diodes at 10.16 mm pitch** —
+8.16 mm of clear copper between the leads, which two tracks fit through. The
+point model treats such a part as an obstacle tying its two nets together. The
+honest reading is that **all these boards force zero bridges**; the earlier
+"14 of 16" understated it. `planarity.forced_bridges` now documents the
+over-report.
+
+So **topological planarity is not the binding constraint.** What defeats
+buck_v2, c2000_feedback and motor_power must be *capacity and escape room* — how
+many tracks fit down a corridor, whether a pad can reach the outside — which no
+planarity of any pad-level graph can express.
+
+One exception worth keeping: on **subxo** the placement itself closes 35
+inter-part gaps and does make the pad graph non-planar (6+ bridges). That is
+geometry rather than topology, and it only appears once a placement is dense.
+
+The pessimistic bracket (part = solid obstacle) fires on 4/4 known failures —
+but also on three boards that close. Fisher exact p ≈ 0.07: suggestive, not
+established, and physically wrong since it walls the DIP corridor.
+
+### Footprint audit — read it against your own design rules
+
+Geometrically, a 2.54 mm header with 1.7 mm lands leaves a **0.840 mm** gap
+against a 0.85 mm netclass clearance: short by **0.010 mm**. Nine footprint
+classes across the boards are in that state.
+
+But `kicad-cli` **does not load `.kicad_dru`** (the handoff says so, and this is
+exactly the trap): `subxo.kicad_dru` already grants that exception deliberately,
+with the reasoning that 0.84 mm still clears the 0.8 mm end mill in a single
+pass and the gap is a property of the part rather than of anything we cut. So on
+subxo and system these are **not defects**.
+
+Only 2 of 15 board projects carry a `.kicad_dru`. For the other 13 the gap will
+flag in KiCad's own DRC — and the better fix is to copy subxo's exception
+pattern rather than shrink the land, since 0.84 mm is already manufacturable and
+a smaller pad costs annular ring.
 
 ---

@@ -464,6 +464,19 @@ def forced_bridges(board: Board, planes: set[str] | None = None,
     The answer depends only on the netlist and which nets are poured -- not on
     where anything sits -- so it is a floor the placer cannot beat and a target
     it should be measured against.
+
+    **Known to over-report on wide parts.** Contracting a component to one node
+    says the copper of everything it touches has to meet at a single point. For
+    a 2.54 mm resistor that is fair; for a DO-41 diode at 10.16 mm pitch it is
+    not -- 8.16 mm of clear copper separates the leads and a track walks
+    straight between them. Measured consequence: this reported 2 forced bridges
+    on motor_power and 1 on system, and both came entirely from such diodes.
+    Modelled pad-accurately (``escape.py``) every board tested forces **zero**.
+
+    So a non-zero result here means "these nets are tangled *if* every part is a
+    point", which is a real signal on dense parts and an artefact on stretched
+    ones -- check the ``cut`` list before believing it. Zero is trustworthy: it
+    can only become more achievable under a truer model, never less.
     """
     nodes, edges = netlist_graph(board, planes)
     n_nets = sum(1 for n in nodes if n[0] == "n")
