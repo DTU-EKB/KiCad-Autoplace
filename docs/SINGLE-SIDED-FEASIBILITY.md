@@ -54,6 +54,24 @@ Three facts that together make the topological approach practical:
    becomes about **realising a specific planar embedding** with enough room —
    a much better-posed problem than the proxy minimisation being done now.
 
+> **Correction, written after the work was done.** Points 1–3 held up, but two
+> specifics in the census below did not. "motor_power forces 2 bridges, system
+> forces 1" were **artefacts** of contracting each part to a point: both came
+> entirely from DO-41 diodes at 10.16 mm pitch, where 8.16 mm of clear copper
+> separates the leads and a track walks straight between them, yet the point
+> model reads the part as an obstacle tying its two nets together. Re-modelled
+> pad-accurately (`escape.py`), **every board tested forces zero bridges** — the
+> finding got stronger, its specifics were wrong.
+>
+> The larger correction is to the thesis of this document. Topological planarity
+> turned out **not** to be the binding constraint: the pad-accurate graph is a
+> forest on every board, so planarity never binds, and boards that fail to route
+> single-sided fail on *capacity and escape room* instead — how many tracks fit
+> down a corridor, whether a pad can reach the outside. Planarity remains a
+> correct and cheap **lower bound**, and it is what proves those bridges are
+> avoidable; it just does not predict which boards will be hard. See
+> `NIGHT-LOG.md` for the measurements.
+
 The lever a human uses and the tool does not: **the netlist graph is not fixed.**
 Rotating a part, flipping it, swapping equivalent gates, reordering series
 elements, and choosing which tree connects a multi-pin net all change the graph
