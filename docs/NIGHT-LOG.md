@@ -187,4 +187,43 @@ Two things follow:
   which is the opposite of what I expected, and worth remembering before
   spending effort on making the anneal topology-aware.
 
+That also exposed a bug: `topoplace` ignored the RNG, so those four "different"
+placements were one placement annealed four ways. The seed now selects which
+face of the embedding becomes the outer one — a real source of variety, since
+every face choice is a different and equally crossing-free drawing.
+
+---
+
+## Orientation: rotate parts without moving them
+
+Which way a part faces decides which of its pads sit near which neighbours.
+Flipping a 2-pin resistor can uncross two nets for free — nothing moves, no
+part is displaced, no overlap can appear. The annealer does propose rotations
+but judges them by HPWL and overlap, so it has no pressure to untangle.
+
+`orient.py` sweeps orientation alone, on a lexicographic
+`(min_bridges, conflicts, tree length)` objective — bridges lead because they
+are what gets soldered, but a vertex cover is coarse and stalls on plateaus, so
+crossings supply the gradient underneath. Rotations are *refused* rather than
+repaired, so the pass is safe to run after `legalize`.
+
+Predicted bridges, mean over 6 seeds:
+
+| board | before | after |
+|---|---|---|
+| buck_v2 | 8.00 | **5.83** |
+| c2000_feedback | 9.50 | **7.00** |
+| mppt_buck | 4.83 | **3.00** |
+| current_sense | 5.33 | **4.00** |
+| motor_power | 20.33 | **16.00** |
+| subxo | 14.17 | **11.33** |
+
+33 of 36 seeds improved, none regressed, no overlaps, ~1.65% of placement time.
+Cost is ~5% more half-perimeter wirelength, though the routed tree length is
+near-neutral (−0.7% to +2.1%) — most of that is pads moving as parts turn.
+
+**Not shipped.** This is *predicted* bridges, and predicted is not routed; this
+repo has already been burned once by a metric that looked right. It is env-gated
+(`ORIENT=1`) in the batch harness and a routed gate is running.
+
 ---
