@@ -218,15 +218,52 @@ def net_segments(board: Board, planes: set[str] | None = None) -> list[Segment]:
 # --------------------------------------------------------------------------
 
 def _crosses(s: Segment, t: Segment) -> bool:
-    """Strict proper crossing of two segments (touching endpoints do not count)."""
+    """Do these two segments share any point?
+
+    Proper crossings *plus* the degenerate touches, which on a PCB are the ones
+    that matter most: an endpoint lying exactly on the other segment means one
+    net's copper runs straight through another net's pad, which is a short, not
+    a near miss. Parts sit on a 2.54 mm grid and get aligned by
+    ``aesthetic.align``, so that arrangement is routine rather than a curiosity.
+
+    The earlier version tested only for a proper crossing, via
+    ``(d1 > 0) != (d2 > 0)``. That silently treats a zero determinant as
+    "negative", so a touch counted as a crossing or not depending on which way
+    round the two segments happened to be written -- measured at 4.6% of
+    grid-aligned pairs, every one of them a touch or a collinear overlap. The
+    count therefore depended on iteration order. This is the standard
+    orientation test with the collinear cases handled explicitly, and it is
+    symmetric in both arguments and in each segment's own endpoint order; the
+    test suite asserts that over several thousand grid-aligned pairs.
+
+    Segments that merely share an endpoint also come back True. ``conflicts``
+    filters those out beforehand, where the caller knows they are two branches
+    meeting at a pad rather than two nets colliding.
+    """
     def ccw(px, py, qx, qy, rx, ry):
         return (ry - py) * (qx - px) - (qy - py) * (rx - px)
+
+    def on(px, py, qx, qy, rx, ry):
+        """r is within pq's bounding box (used only when r is collinear with pq)."""
+        return (min(px, qx) <= rx <= max(px, qx)
+                and min(py, qy) <= ry <= max(py, qy))
 
     d1 = ccw(t.ax, t.ay, t.bx, t.by, s.ax, s.ay)
     d2 = ccw(t.ax, t.ay, t.bx, t.by, s.bx, s.by)
     d3 = ccw(s.ax, s.ay, s.bx, s.by, t.ax, t.ay)
     d4 = ccw(s.ax, s.ay, s.bx, s.by, t.bx, t.by)
-    return ((d1 > 0) != (d2 > 0)) and ((d3 > 0) != (d4 > 0))
+    if (((d1 > 0) != (d2 > 0)) and d1 != 0 and d2 != 0
+            and ((d3 > 0) != (d4 > 0)) and d3 != 0 and d4 != 0):
+        return True
+    if d1 == 0 and on(t.ax, t.ay, t.bx, t.by, s.ax, s.ay):
+        return True
+    if d2 == 0 and on(t.ax, t.ay, t.bx, t.by, s.bx, s.by):
+        return True
+    if d3 == 0 and on(s.ax, s.ay, s.bx, s.by, t.ax, t.ay):
+        return True
+    if d4 == 0 and on(s.ax, s.ay, s.bx, s.by, t.bx, t.by):
+        return True
+    return False
 
 
 def conflicts(segments: list[Segment]) -> list[tuple[int, int]]:

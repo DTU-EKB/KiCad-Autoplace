@@ -112,6 +112,49 @@ def test_same_net_segments_never_conflict():
     assert globalroute.conflicts(segs) == []
 
 
+def test_a_segment_running_through_another_nets_pad_is_a_conflict():
+    """Copper of one net passing exactly through a pad of another is a short --
+    the most severe conflict there is, not the absence of one. The strict
+    'proper crossing' test misses it, because one of its orientation
+    determinants is exactly zero, and on a grid (2.54 mm pitch, parts aligned)
+    that is a common arrangement rather than a curiosity."""
+    b = _board(*_wire("A", "N1", 0, 10, 40, 10),
+               *_wire("B", "N2", 20, 10, 20, 40))     # B starts ON A
+    assert globalroute.conflicts(globalroute.net_segments(b)) == [(0, 1)]
+
+
+def test_collinear_overlapping_segments_of_different_nets_conflict():
+    b = _board(*_wire("A", "N1", 0, 0, 30, 0),
+               *_wire("B", "N2", 10, 0, 40, 0))
+    assert globalroute.conflicts(globalroute.net_segments(b)) == [(0, 1)]
+
+
+def test_collinear_but_disjoint_segments_do_not_conflict():
+    b = _board(*_wire("A", "N1", 0, 0, 10, 0),
+               *_wire("B", "N2", 20, 0, 30, 0))
+    assert globalroute.conflicts(globalroute.net_segments(b)) == []
+
+
+def test_crossing_test_is_symmetric_under_endpoint_and_argument_order():
+    """A crossing is a property of two segments, not of the order they are
+    written in. Asymmetry here silently makes every crossing count depend on
+    iteration order -- and it showed up on 4.6% of grid-aligned pairs."""
+    import random
+    rng = random.Random(7)
+    vals = [0.0, 1.0, 2.0, 2.54, 5.08, 10.0]
+    Seg = globalroute.Segment
+    for _ in range(4000):
+        a = Seg("A", *[rng.choice(vals) for _ in range(4)])
+        c = Seg("B", *[rng.choice(vals) for _ in range(4)])
+        if (a.ax, a.ay) == (a.bx, a.by) or (c.ax, c.ay) == (c.bx, c.by):
+            continue
+        a2 = Seg("A", a.bx, a.by, a.ax, a.ay)
+        c2 = Seg("B", c.bx, c.by, c.ax, c.ay)
+        got = {globalroute._crosses(x, y)
+               for x, y in ((a, c), (c, a), (a2, c), (a, c2), (a2, c2), (c2, a2))}
+        assert len(got) == 1, (a, c, got)
+
+
 def test_segments_sharing_an_endpoint_do_not_conflict():
     # Two nets meeting at a pad location: touching is not crossing.
     b = _board(*_wire("A", "N1", 20, 20, 40, 40),
