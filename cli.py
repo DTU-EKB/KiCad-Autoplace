@@ -381,6 +381,41 @@ def cmd_feasibility(args):
     return 0
 
 
+def cmd_advise(args):
+    """Single-sided or double-sided for this board, and why.
+
+      cli.py advise BOARD.kicad_pcb          (MAX_BRIDGES=n to set your tolerance)
+
+    Two kinds of claim, deliberately kept apart: whether single-sided is
+    POSSIBLE and how many bridges the circuit forces are exact, decided from the
+    netlist; whether this placer is likely to FIND such a layout is an estimate
+    fitted to a small sample. Either way the pipeline still attempts
+    single-sided -- this is advice, not a gate.
+    """
+    from autoplace import advise
+    model, _ = kicad_io.load_board(args[0])
+    a = advise.assess(model,
+                      max_bridges=int(os.environ.get("MAX_BRIDGES", "4")))
+    out = {"type": "advice", "input": args[0],
+           "single_sided_possible": a.single_sided_possible,
+           "forced_bridges": a.forced_bridges, "difficulty": a.difficulty,
+           "confidence": a.confidence, "recommend": a.recommend,
+           "parts": a.parts, "nets": a.nets, "reasons": a.reasons,
+           "try_single_sided_first": a.try_single_sided_first}
+    if os.environ.get("AUTOPLACE_STREAM") == "1":
+        sys.stdout.write(json.dumps(out) + "\n")
+        return 0
+    label = {"single": "SINGLE-SIDED",
+             "single-with-bridges": "SINGLE-SIDED with wire bridges",
+             "double": "DOUBLE-SIDED"}[a.recommend]
+    print(f"{os.path.basename(args[0])}: {a.parts} parts, {a.nets} nets")
+    print(f"\n  recommendation: {label}   (difficulty: {a.difficulty}, {a.confidence})")
+    print()
+    for r in a.reasons:
+        print(f"  - {r}")
+    return 0
+
+
 def cmd_metrics(args):
     """Just print metrics for a board, no placement (baseline measurement)."""
     from autoplace import metrics
@@ -485,7 +520,7 @@ def main(argv):
             "metrics": cmd_metrics, "dump": cmd_dump, "refine": cmd_refine,
             "complete": cmd_complete,
             "finalize": cmd_finalize, "preflight": cmd_preflight,
-            "feasibility": cmd_feasibility}
+            "feasibility": cmd_feasibility, "advise": cmd_advise}
     if len(argv) < 2 or argv[1] not in cmds:
         print(__doc__)
         return 2

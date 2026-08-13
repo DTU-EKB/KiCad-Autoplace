@@ -31,7 +31,7 @@ def complete(board, pcb, *, jar, work_pcb, passes=20, seed=0, sides=1,
              place_budget=3, max_growth_mm=completion.DEFAULT_MAX_GROWTH_MM,
              growth_step_mm=completion.DEFAULT_GROWTH_STEP_MM,
              allow_growth=True, allow_bridges=True, place_margin=0.85,
-             progress=None) -> dict:
+             progress=None, max_bridges_allowed=4) -> dict:
     """Escalate until the board is fully connected or the ladder is exhausted.
 
     Mutates ``board`` to the winning placement. Returns the summary from
@@ -193,16 +193,25 @@ def complete(board, pcb, *, jar, work_pcb, passes=20, seed=0, sides=1,
     board.components = best_model.components
     out = completion.summarise(history)
 
-    # Report the bridges against the floor the netlist forces. Bridges above
-    # that floor are the placer's doing, not the circuit's, and until this was
-    # measurable the tool had no way to tell the two apart -- so every bridge
-    # looked equally unavoidable and there was nothing to aim at.
-    from . import planarity
+    # Judge the single-sided attempt against the floor the netlist forces, and
+    # say plainly whether to keep it or move to two layers. Bridges at the floor
+    # are the circuit's doing; bridges above it are the placer's. Until that was
+    # measurable the tool could not tell them apart, so every bridge looked
+    # equally unavoidable and there was nothing to aim at -- and a board that
+    # quietly fell back to two layers looked like a success.
+    from . import advise as advise_mod
     try:
-        forced = planarity.forced_bridges(board)
-        out["forced_bridges"] = forced["bridges"]
-        out["single_sided_possible"] = forced["planar"]
-        out["avoidable_bridges"] = max(0, out.get("bridges", 0) - forced["bridges"])
+        adv = advise_mod.assess(board, max_bridges=max_bridges_allowed)
+        v = advise_mod.verdict(adv, closed=out.get("missing", 0) == 0,
+                               bridges=out.get("bridges", 0),
+                               missing=out.get("missing", 0))
+        out["single_sided_possible"] = adv.single_sided_possible
+        out["forced_bridges"] = adv.forced_bridges
+        out["avoidable_bridges"] = v["avoidable_bridges"]
+        out["at_the_floor"] = v["at_the_floor"]
+        out["keep_single_sided"] = v["keep_single_sided"]
+        out["recommend"] = v["recommend"]
+        out["advice"] = v["reasons"]
     except Exception:                       # never let analysis break a finished board
         out["forced_bridges"] = None
 
