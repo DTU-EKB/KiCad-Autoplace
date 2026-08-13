@@ -349,6 +349,38 @@ def cmd_preflight(args):
     return 0
 
 
+def cmd_feasibility(args):
+    """Can this board be single-sided, and how many wire bridges are forced?
+
+      cli.py feasibility BOARD.kicad_pcb
+
+    Decided from the netlist alone -- the component/net incidence graph with the
+    poured nets removed -- so the answer holds for EVERY placement. It is a floor
+    the placer cannot beat and a target it should be measured against. Costs
+    milliseconds, where finding out by routing costs 10-60 s and only ever tells
+    you about the one placement you tried.
+    """
+    from autoplace import planarity
+    model, _ = kicad_io.load_board(args[0])
+    r = planarity.forced_bridges(model)
+    r["input"] = args[0]
+    r["planes"] = sorted(model.planes)
+    if os.environ.get("AUTOPLACE_STREAM") == "1":
+        r["type"] = "feasibility"
+        sys.stdout.write(json.dumps(r) + "\n")
+    else:
+        print(json.dumps(r, indent=2))
+        if r["planar"]:
+            print(f"\n{args[0]}: single-sided is achievable with ZERO wire "
+                  f"bridges. Any bridge the placer ends up using is avoidable.")
+        else:
+            print(f"\n{args[0]}: at least {r['bridges']} wire bridge(s) are "
+                  f"forced by the netlist; no placement avoids them.")
+            for a, b in r["cut"]:
+                print(f"    {a} -- {b}")
+    return 0
+
+
 def cmd_metrics(args):
     """Just print metrics for a board, no placement (baseline measurement)."""
     from autoplace import metrics
@@ -452,7 +484,8 @@ def main(argv):
     cmds = {"place": cmd_place, "place-multi": cmd_place_multi,
             "metrics": cmd_metrics, "dump": cmd_dump, "refine": cmd_refine,
             "complete": cmd_complete,
-            "finalize": cmd_finalize, "preflight": cmd_preflight}
+            "finalize": cmd_finalize, "preflight": cmd_preflight,
+            "feasibility": cmd_feasibility}
     if len(argv) < 2 or argv[1] not in cmds:
         print(__doc__)
         return 2

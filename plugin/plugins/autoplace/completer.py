@@ -192,6 +192,20 @@ def complete(board, pcb, *, jar, work_pcb, passes=20, seed=0, sides=1,
 
     board.components = best_model.components
     out = completion.summarise(history)
+
+    # Report the bridges against the floor the netlist forces. Bridges above
+    # that floor are the placer's doing, not the circuit's, and until this was
+    # measurable the tool had no way to tell the two apart -- so every bridge
+    # looked equally unavoidable and there was nothing to aim at.
+    from . import planarity
+    try:
+        forced = planarity.forced_bridges(board)
+        out["forced_bridges"] = forced["bridges"]
+        out["single_sided_possible"] = forced["planar"]
+        out["avoidable_bridges"] = max(0, out.get("bridges", 0) - forced["bridges"])
+    except Exception:                       # never let analysis break a finished board
+        out["forced_bridges"] = None
+
     out["routed_pcb"] = best_pcb_path
     out["growth_mm"] = growth_total
     out["board_size"] = None
