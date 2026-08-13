@@ -299,3 +299,55 @@ placement work can finish the job or whether a dedicated single-layer router is
 required.
 
 ---
+
+## Single-sided is now an attempt, not a goal
+
+The tool was pushing for single-sided and then quietly falling back to two
+layers *inside* the bridging step, which reads as a success. `advise.py`
+separates what was tangled:
+
+| | kind |
+|---|---|
+| `single_sided_possible`, `forced_bridges` | **exact** — from the netlist, holds for every placement |
+| `difficulty` | **estimated** — whether *this placer, today* finds such a layout |
+| `recommend` | those plus the user's own tolerance for hand-soldered wires |
+
+Single-sided is **always attempted regardless of the recommendation**, because
+trying is cheap next to being wrong and the result is fact rather than
+prediction. `try_single_sided_first` is a field, not an implication.
+
+The part-count bands are fitted to the routed study above, not chosen for
+roundness — attempted-and-closed at 10, 10, 11, 11, 12, 14, 17, 20 parts;
+attempted-and-failed at 31, 38, 47, 58. Nothing was measured between 21 and 30,
+exactly where the boundary sits, so that gap is reported as "moderate, worth
+attempting" instead of guessed. Pad density was tried first and does **not**
+separate the groups (drive_circuit closes at 1.14 pads/cm² while boards at half
+that do not), so part count is used alone rather than dressed up with a term the
+data will not support.
+
+`cli.py advise BOARD` gives all of it before anything is placed.
+
+---
+
+## Writing our own single-layer router
+
+Two agents, two genuinely different approaches, both measured against
+FreeRouting on the *same placements* with the same `unrouted.analyse` DRC count,
+and both against `planarity.forced_bridges` as the floor:
+
+* **`gridroute`** — conventional Lee/A\* maze router with rip-up and reroute.
+  The workhorse; net ordering and rip-up are where routing quality lives.
+* **`toporoute`** — routes *along the planar embedding*. The embedding already
+  says, for each junction, the cyclic order connections leave it and which face
+  each lives in. That is exactly the information a maze router lacks and
+  rediscovers badly by search.
+
+What makes the narrow scope winnable: one layer (no vias, no layer assignment),
+ground needs no routing at all (the pour connects it), obstacles are only pads
+and the board edge since copper runs *under* component bodies, and anything that
+genuinely cannot be routed becomes an explicitly counted wire bridge rather than
+a silent failure.
+
+Explicitly not the goal: a general autorouter.
+
+---
