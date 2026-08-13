@@ -21,17 +21,19 @@ Two details do the real work:
   the copper needs, so relaxing them alongside the parts places the junctions
   too. They are discarded at the end, but their positions are what keep the
   parts untangled.
-* **The boundary is the largest face of the embedding.** Any face may be chosen
-  as the outer one; taking the largest puts the most vertices on the perimeter,
-  which is both the least cramped and a good match for a board whose connectors
-  belong on the edge anyway.
+* **The boundary is a face of the embedding, chosen by seed.** Any face may be
+  taken as the outer one, and each choice gives a different but equally
+  crossing-free drawing -- which is where a multi-seed gallery's variety comes
+  from here. Faces are tried largest first, since the biggest one puts the most
+  parts on the perimeter: least cramped, and a good match for a board whose
+  connectors belong on the edge anyway.
 
 Disconnected netlists are laid out per connected piece and packed side by side,
 because a barycentric relaxation says nothing about where two unrelated
 subcircuits should sit relative to each other.
 
 Pure Python, no pcbnew, deterministic: every iteration order is sorted, so the
-same board always yields the same seed.
+same board and seed always yield the same layout.
 """
 from __future__ import annotations
 
@@ -47,12 +49,18 @@ DEFAULT_SWEEPS = 400
 _TOL = 1e-9
 
 
-def _blocks_and_faces(nodes, edges):
+def _blocks_and_faces(nodes, edges, choice: int = 0):
     """A face of the largest biconnected block, to pin as the outer boundary.
 
     Only a biconnected block has well-defined faces. Netlist graphs are usually
     a big block with trees hanging off it, so the block carries the topology
     that matters and the pendants follow wherever the relaxation puts them.
+
+    ``choice`` selects among the faces, largest first. **Any** face of a planar
+    embedding may be taken as the outer one, and each gives a different but
+    equally crossing-free drawing -- so this is the honest source of variety for
+    a multi-seed gallery. Without it every candidate would be the same board,
+    because the embedding is otherwise fully determined by the netlist.
     """
     verts, e = planarity._normalise(nodes, edges)
     if not e:
@@ -67,10 +75,14 @@ def _blocks_and_faces(nodes, edges):
     faces = planarity._embed_block(best)
     if not faces:
         return None
-    return max(faces, key=len)
+    # Largest first: the biggest face puts the most parts on the perimeter,
+    # which is the least cramped starting point and the best match for a board
+    # whose connectors belong on the edge anyway.
+    ordered = sorted(faces, key=lambda f: (-len(f), [planarity._rank(v) for v in f]))
+    return ordered[choice % len(ordered)]
 
 
-def _layout_component(nodes, adj, sweeps):
+def _layout_component(nodes, adj, sweeps, choice: int = 0):
     """Barycentric positions in the unit disk for one connected piece."""
     nodes = sorted(nodes, key=planarity._rank)
     if len(nodes) == 1:
@@ -82,7 +94,7 @@ def _layout_component(nodes, adj, sweeps):
             if w in nodeset and planarity._rank(v) < planarity._rank(w):
                 sub_edges.append((v, w))
 
-    boundary = _blocks_and_faces(nodes, sub_edges)
+    boundary = _blocks_and_faces(nodes, sub_edges, choice)
     if boundary is None or len(boundary) < 3:
         # No cycle to pin: a tree. Pin its leaves instead, which spreads it out
         # rather than collapsing it onto its centroid.
@@ -140,7 +152,8 @@ def _pack(layouts):
 
 
 def graph_positions(board: Board, planes: set[str] | None = None,
-                    sweeps: int = DEFAULT_SWEEPS) -> dict[str, tuple[float, float]]:
+                    sweeps: int = DEFAULT_SWEEPS,
+                    seed: int = 0) -> dict[str, tuple[float, float]]:
     """Crossing-free relative positions for every part, in arbitrary units.
 
     Returns component refs only; the net junction vertices are dropped once they
@@ -151,14 +164,14 @@ def graph_positions(board: Board, planes: set[str] | None = None,
         return {}
     verts, e = planarity._normalise(nodes, edges)
     adj = planarity._adjacency(verts, e)
-    layouts = [_layout_component(comp, adj, sweeps)
+    layouts = [_layout_component(comp, adj, sweeps, seed)
                for comp in planarity._components(verts, adj)]
     merged = _pack(layouts)
     return {v[1]: xy for v, xy in merged.items() if v[0] == "c"}
 
 
 def seed(board: Board, planes: set[str] | None = None,
-         sweeps: int = DEFAULT_SWEEPS) -> int:
+         sweeps: int = DEFAULT_SWEEPS, seed: int = 0) -> int:
     """Move every free part onto its planar-embedding position. Returns the count.
 
     Positions are scaled to fill the outline while keeping every footprint fully
@@ -170,7 +183,7 @@ def seed(board: Board, planes: set[str] | None = None,
     free = [c for c in board.components.values() if not c.locked]
     if not free:
         return 0
-    rel = graph_positions(board, planes, sweeps)
+    rel = graph_positions(board, planes, sweeps, seed)
     placed = [c for c in free if c.ref in rel]
     if not placed:
         # Nothing the netlist constrains -- every net is poured or single-ended.

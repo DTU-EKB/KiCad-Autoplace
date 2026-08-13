@@ -87,7 +87,10 @@ def place(board: Board, *, seed: int = 0, grid: float = 0.5, margin: float = 0.8
         # no crossings at all, which is what a single-sided board needs and what
         # the planarity census says is achievable on most real boards.
         from . import topoplace
-        topoplace.seed(board)
+        # Pass the seed through: a planar graph has many embeddings (any face
+        # may be the outer one), so the gallery still gets genuinely different
+        # candidates rather than the same board N times.
+        topoplace.seed(board, seed=seed)
     elif use_floorplan:
         floorplan_mod.floorplan(board, rng, margin=margin)
     else:

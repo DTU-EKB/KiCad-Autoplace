@@ -34,6 +34,23 @@ def _ring(n):
     return _board(*[_part(f"R{i}", f"N{i}", f"N{(i + 1) % n}") for i in range(n)])
 
 
+def _mesh():
+    """3x3 grid of parts wired to their right and lower neighbours."""
+    nets = {(x, y): [] for y in range(3) for x in range(3)}
+    n = 0
+    for y in range(3):
+        for x in range(3):
+            for nb in (((x + 1, y) if x + 1 < 3 else None),
+                       ((x, y + 1) if y + 1 < 3 else None)):
+                if nb is None:
+                    continue
+                nets[(x, y)].append(f"N{n}")
+                nets[nb].append(f"N{n}")
+                n += 1
+    return _board(*[_part(f"U{x}{y}", *ns) for (x, y), ns in sorted(nets.items())],
+                  w=120.0, h=120.0)
+
+
 def _crossing_pairs(board):
     """Straight-line crossings between the drawn net trees -- the thing the
     embedding is supposed to drive to zero."""
@@ -84,6 +101,37 @@ def test_seeding_is_deterministic():
     topoplace.seed(b)
     assert [(c.ref, round(c.x, 9), round(c.y, 9)) for c in a.components.values()] == \
            [(c.ref, round(c.x, 9), round(c.y, 9)) for c in b.components.values()]
+
+
+def test_the_same_seed_number_reproduces_the_same_layout():
+    a, b = _mesh(), _mesh()
+    topoplace.seed(a, seed=3)
+    topoplace.seed(b, seed=3)
+    assert [(c.ref, round(c.x, 9), round(c.y, 9)) for c in a.components.values()] == \
+           [(c.ref, round(c.x, 9), round(c.y, 9)) for c in b.components.values()]
+
+
+def test_different_seeds_give_different_planar_drawings():
+    """A planar graph has many embeddings -- any face may be the outer one, and
+    each choice is a different but equally valid crossing-free layout. Without
+    this the gallery's multi-seed diversity collapses: every candidate would be
+    the same board, because the embedding ignores the RNG entirely."""
+    layouts = set()
+    for s in range(6):
+        b = _mesh()
+        topoplace.seed(b, seed=s)
+        layouts.add(tuple(sorted((c.ref, round(c.x, 4), round(c.y, 4))
+                                 for c in b.components.values())))
+    assert len(layouts) >= 2
+
+
+def test_every_seed_still_produces_a_legal_in_bounds_layout():
+    for s in range(6):
+        b = _mesh()
+        topoplace.seed(b, seed=s)
+        for c in b.components.values():
+            assert b.x0 <= c.left and c.right <= b.x1, (s, c.ref)
+            assert b.y0 <= c.top and c.bottom <= b.y1, (s, c.ref)
 
 
 # --------------------------------------------------------------------------
