@@ -131,8 +131,14 @@ not a failure: an arbitrary netlist is essentially never planar.
 - DSN files must be **BOM-free**.
 - It does **not** re-emit fixed wires in its session file, so a raw SES import
   deletes locked stage-1 copper. Snapshot tracks first and re-add what vanished.
-- Results are **not perfectly reproducible** run to run. Differences of one or
-  two connections are inside the noise — do not rank candidates on them.
+- ~~Results are **not perfectly reproducible** run to run.~~ **Corrected
+  2026-08-13 (later session).** Measured with `tools/router_noise.py`: the same
+  placement routed 6 times gave *identical* results every time (stage-1 missing
+  5/5/5/5/5/5, bridges 3/3/3/3/3/3, sd = 0.00). FreeRouting 1.9.0 is
+  deterministic for a fixed DSN and pass count, so routed outcomes **can** be
+  compared candidate to candidate. The earlier "noise" was almost certainly the
+  DRC parser bug below, which made the same board report different counts
+  depending on which items KiCad happened to name.
 
 ---
 
@@ -195,6 +201,157 @@ were routing defects — they were in the layer around the router. If a detailed
 router is ever wanted, the tractable scope is a **single-layer maze/A\* router
 for THT boards with a ground plane, with explicit jumper insertion** — not a
 general autorouter.
+
+---
+
+## RESULT of that project (2026-08-13, later session)
+
+The global router was built, validated, and **rejected as a cost-function
+input**. The gate did its job. Read this before rebuilding it.
+
+### What was built
+
+`plugin/plugins/autoplace/globalroute.py` — pure Python, no pcbnew, no Java,
+~2.7 ms for a 40-part board, 30 unit tests. It gives the two things asked for:
+
+* **congestion** — coarse grid, per-cell demand (net-tree edges rasterised) vs
+  capacity (`cell / (track + clearance)`, derated by the THT pads in the cell);
+* **bridges** — the minimum wire bridges a single-sided placement forces,
+  computed as the **minimum vertex cover of the crossing graph** (segments are
+  vertices, crossings are edges). That is the right model: one lifted wire
+  clears *every* crossing along it, so a segment cutting across five others is
+  one bridge, not five. Solved exactly by branch and bound, checked against
+  brute force on 45 graphs including K5.
+
+### Why it is not in the cost function
+
+76 placements across **4 boards** (subxo 40 seeds, buck_v2 12, c2000_feedback 12,
+motor_power 12) were routed for real — stage-1 single-sided, then stage-2
+bridging — and scored against the bridges each placement actually forces.
+Correlations are computed **per board and then averaged**; pooling boards would
+mostly measure "which board is this", since a 58-part board needs more bridges
+than a 31-part one whatever the placement.
+
+Mean per-board Spearman vs required bridges:
+
+| predictor | mean rho |
+|---|---|
+| `crossings` (the proxy that was already there) | **0.614** |
+| `gr_conflicts` (power nets excluded) | 0.588 |
+| `gr_bridges` (power nets excluded) | 0.581 |
+| `hpwl_mm` | 0.568 |
+| `gr_bridges` (all routed nets) | 0.377 |
+| `gr_overflow` (congestion) | 0.440 |
+
+And as a *combination*, which is what "wire it in alongside the existing terms"
+would mean:
+
+| ranking signal | mean rho |
+|---|---|
+| rank(`crossings`) + rank(`hpwl`) — **both already existed** | 0.627 |
+| rank(`crossings`) + rank(`hpwl`) + rank(`gr_bridges`) | 0.611 |
+
+Adding the global router to the two existing metrics makes the ranking **worse**.
+It correlates (rho 0.58, positive on all four boards) but it is not carrying
+information that HPWL and crossings do not already carry. Two things worth
+knowing if you try again:
+
+* **Excluding power nets matters more than the clever part.** `gr_bridges` goes
+  from 0.377 to 0.581 purely by dropping power rails. A 7-pin rail's tree edges
+  span the whole board and cross everything regardless of placement detail, so
+  they swamp the signal from the signal nets.
+* **The vertex cover compresses the signal.** Conflicts range 20–55 across
+  placements while their cover ranges only 10–19, so distinguishable placements
+  collapse onto the same integer. It is the physically correct quantity and a
+  worse *ranking* statistic. Report bridges; rank on something finer.
+
+Reproduce with `tools/correlate_globalroute.py` (routes a board at N seeds,
+records predictions + ground truth + the full placement geometry) and
+`tools/score_correlation.py` (replays the saved geometry against any predictor
+variant, per board, with bootstrap CIs). Routing is the expensive half and is
+done once; predictor tuning is offline and instant.
+
+### What the study *did* pay for
+
+**`ranking.candidate_key` was ranking candidates at rho 0.01 — no better than
+shuffling them.** The key was lexicographic:
+
+```
+(overlaps, sheet_spread, pinch_fraction, decap_proximity, hpwl_mm, seed)
+```
+
+A lexicographic key is decided by the first term that discriminates, and
+`pinch_fraction` / `decap_proximity` are near-continuous, so one of them settled
+the whole order before `hpwl_mm` was ever compared. Neither predicts routability:
+`pinch_fraction` scores rho 0.05, `decap_proximity` **-0.18** (i.e. it was
+actively pointing the wrong way).
+
+Now: `overlaps` as a hard legality gate, then the summed **fractional ranks** of
+`crossings` and `hpwl_mm` (fractional ranks so neither wins on scale — crossings
+is a count in the tens, HPWL is millimetres in the hundreds), then the aesthetic
+and electrical terms as genuine tie-breakers, then seed.
+
+| | old key | new key |
+|---|---|---|
+| mean rho vs required bridges | 0.010 | **0.629** |
+| excess bridges on the top pick, 4 boards | 21 | **6** |
+
+Per board, bridges the user hand-solders on the gallery's top pick (best
+available in brackets): buck_v2 2 → **0** [0], c2000_feedback 7 → **3** [1],
+motor_power 12 → **7** [5], subxo 6 → **2** [0].
+
+`cli.py` also had to start carrying `crossings` through to the ranker — it was
+computed, displayed in the app, and then dropped from the dict `pre_rank` sees.
+
+### A metric bug that mattered more than the router
+
+`unrouted.parse_drc_report` matched only **pad** endpoints. KiCad reports an
+unconnected item between the two objects flanking the gap, and on a routed board
+those are routinely a `Track` or the ground `Zone` — so most entries were
+silently discarded:
+
+```
+Track [/VIN] on B.Cu, length 15.87 mm  <->  PTH pad 1 [/VIN] of J4   dropped
+PTH pad 2 [/GND] of R9                 <->  Zone [/GND] on B.Cu      dropped
+```
+
+`completer` trusts that count over the ratsnest, so **boards with up to 13
+missing connections were reported as 100% complete**. The board the earlier
+session delivered as *"100% (0 missing) — confirmed by DRC on the output board"*
+in fact has **10 missing connections** (5 GND pads not reaching the pour, plus
+`/OUT1`, `/VG_DIV`, `/POT_W` and two `/VGND` gaps). Check it with
+`unrouted.analyse` before believing any completion figure from before this fix.
+
+This also **removes the premise of commit `3877e74`**. "DRC refills zones and
+routinely finds fewer missing connections than the ratsnest" was the parser
+dropping entries, not DRC being smarter. With the parser fixed the two agree
+**exactly** on all 16 boards checked (4–13 missing each). DRC is still the right
+source — it refills zones and it can name *which* connections are missing — but
+if the two ever diverge again, something is broken; `completer` now says so.
+
+**The lesson from the earlier session held, and cost the same time twice: fix the
+metric before optimising against it.** The first 16-seed run also flattered the
+predictor (`gr_bridges` rho 0.66 on subxo at n=16, 0.46 at n=40) — a difference
+of 0.1 in rho at n≈16 is noise, and the head-to-head bootstrap said so.
+
+### If you pick this up again
+
+* Don't re-run the correlation harness on one board. One board and 16 seeds
+  produced a confident, wrong answer twice over.
+* The unexploited signal is topological, not geometric. Straight-line MST edges
+  over-predict by ~3x because the router detours; the "discount crossings within
+  N mm of an endpoint" hack captured some of that (rho 0.84 on one board) but was
+  wildly unstable across N and across boards — classic overfitting on 16 points.
+  A tree chosen to *minimise crossings* rather than length is the principled
+  version, and is untried.
+* Stage-2 bridging does **not** reach 100%: across the 76 routed placements it
+  left 1–6 connections still missing every time. "Bridges" is therefore "what
+  FreeRouting laid on the top layer in one pass", not "what finishes the board" —
+  a noisy target, and worth fixing before it is used as a gate again.
+* `anneal._quality` was deliberately **not** touched. The predictor that was
+  supposed to go there failed its gate, and the handoff's own warning about
+  adding terms to `_quality` stands. Adding `crossings` to it is the obvious next
+  experiment and needs its own place-and-route gate — the harness is ready.
 
 ---
 

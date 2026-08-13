@@ -87,6 +87,14 @@ class Board:
     y1: float
     components: dict[str, Component] = field(default_factory=dict)
     edge_keepout: float = 0.0      # extra inward inset from the outline (mm); 0 == legacy
+    planes: set[str] = field(default_factory=set)
+    """Nets carried by a copper pour, so they need no routed track.
+
+    A filled ground plane connects its pads for free. ``globalroute`` excludes
+    these from the routing estimate; counting them would report a phantom wire
+    bridge for every plane pad. Populated by ``kicad_io`` from the board's real
+    zones; empty on a bare model, where ``globalroute`` falls back to matching
+    the ground net by name."""
 
     @property
     def width(self) -> float:

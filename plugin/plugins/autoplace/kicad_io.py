@@ -79,7 +79,30 @@ def build_model(pcb: "pcbnew.BOARD") -> Board:
                 pin_function=_safe(pad.GetPinFunction),
             ))
         board.components[ref] = comp
+    board.planes = _plane_nets(pcb)
     return board
+
+
+def _plane_nets(pcb: "pcbnew.BOARD") -> set[str]:
+    """Nets a copper pour connects, so the global router must not route them.
+
+    ``force_gnd_zones`` fills every copper pour before export -- and adopts a
+    net-less pour onto ground -- so by routing time these nets are connected by
+    the plane. A net-less pour is reported under the ground net for the same
+    reason. Reads the zone list only; it never modifies the board.
+    """
+    gnd = find_gnd_net(pcb)
+    out: set[str] = set()
+    for i in range(pcb.GetAreaCount()):
+        z = pcb.GetArea(i)
+        if not (z.IsOnLayer(pcbnew.B_Cu) or z.IsOnLayer(pcbnew.F_Cu)):
+            continue
+        if z.GetNetCode() == 0:
+            if gnd is not None:
+                out.add(gnd.GetNetname())
+        else:
+            out.add(z.GetNetname())
+    return out
 
 
 def load_board(path: str) -> tuple[Board, "pcbnew.BOARD"]:
