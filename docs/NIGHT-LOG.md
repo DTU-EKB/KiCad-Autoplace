@@ -222,9 +222,21 @@ Predicted bridges, mean over 6 seeds:
 Cost is ~5% more half-perimeter wirelength, though the routed tree length is
 near-neutral (−0.7% to +2.1%) — most of that is pads moving as parts turn.
 
-**Not shipped.** This is *predicted* bridges, and predicted is not routed; this
-repo has already been burned once by a metric that looked right. It is env-gated
-(`ORIENT=1`) in the batch harness and a routed gate is running.
+**Not shipped, and now we know why.** The routed gate came back and the
+predicted gain did not convert:
+
+| board | base | with orientation |
+|---|---|---|
+| boost | 1 bridge, 6/6 closed | 1 bridge, 3/4 closed |
+| current_sense | never closed | never closed |
+| mppt_buck | never closed | 4 bridges, 1/4 closed |
+
+No board improved. On mppt_buck it closed at 4 bridges where topology seeding
+closed the same board at **0**, so it is also the weaker of the two options
+where both finish. Second time in this codebase that a metric-only improvement
+failed a routed gate — the orientation pass keeps its `orient_pass=False`
+default and `orient.optimise`'s docstring records the numbers, so nobody
+switches it on for the encouraging prediction alone.
 
 ---
 

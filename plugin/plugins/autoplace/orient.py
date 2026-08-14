@@ -286,6 +286,22 @@ def optimise(board: Board, *, margin: float = 0.8, max_sweeps: int = MAX_SWEEPS,
              wirelength_tiebreak: bool = True) -> dict:
     """Sweep every free part's orientation to a local optimum for crossings.
 
+    **Off by default, and the reason is a measurement.** This pass looks strong
+    on predicted bridges -- 6 boards x 6 seeds, ~22% fewer, 33 of 36 seeds
+    improved and none regressed. It did not survive a routed gate. Routing the
+    same boards for real, against the baseline placer:
+
+        boost          1 bridge, 6/6 closed  ->  1 bridge, 3/4 closed
+        current_sense  never closed          ->  never closed
+        mppt_buck      never closed          ->  4 bridges, 1/4 closed
+
+    No board improved, and on mppt_buck this closed at 4 bridges where topology
+    seeding closed the same board at 0. So the predicted gain does not convert,
+    and the pass is worse than the alternative on the one board where both
+    finish. That is the second time in this codebase a metric-only improvement
+    failed its routed gate; do not switch this on because the predicted numbers
+    look good.
+
     Mutates ``board`` in place (only ``Component.rot`` -- never ``x``/``y``) and
     returns a report: before/after bridges, crossings and tree length, the parts
     that turned, and the cost of getting there.
