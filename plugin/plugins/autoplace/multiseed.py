@@ -24,6 +24,26 @@ from . import engine, metrics, serialize
 from .model import Board
 
 
+#: Strategies the "mixed" gallery alternates between, in seed order.
+MIXED_CYCLE = ("auto", "topo")
+
+
+def resolve_strategy(strategy: str, seed: int) -> str:
+    """Turn the caller's strategy into the one this seed should actually use.
+
+    ``"mixed"`` alternates the force-directed seed with the planar-embedding
+    seed. Neither dominates, measured on routed boards: the embedding is the
+    ONLY thing that reaches zero wire bridges on boost, mppt_buck and
+    current_sense, and it is the WORSE choice on boost_v2 (2 bridges against
+    force-directed's 0). Picking either as the default would give up boards that
+    currently come out perfect, so the gallery runs both and lets the ranking
+    decide -- which is free, since every candidate is scored anyway.
+    """
+    if strategy != "mixed":
+        return strategy
+    return MIXED_CYCLE[seed % len(MIXED_CYCLE)]
+
+
 def _place_one(model: Board, seed: int, strategy: str, connectors,
                margin: float, track: float, aesthetic: bool) -> dict:
     """Place one seed on its own copy of ``model``; never raises.
@@ -33,7 +53,8 @@ def _place_one(model: Board, seed: int, strategy: str, connectors,
     """
     board = copy.deepcopy(model)
     try:
-        report = engine.place(board, seed=seed, strategy=strategy,
+        report = engine.place(board, seed=seed,
+                              strategy=resolve_strategy(strategy, seed),
                               connectors=connectors, margin=margin, track=track,
                               aesthetic=aesthetic)
     except Exception as exc:                      # one bad seed must not kill the gallery

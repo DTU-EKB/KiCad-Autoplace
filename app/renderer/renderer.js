@@ -332,6 +332,65 @@ async function loadBoardView() {
   $("boardMode").textContent = "Before placement";
   renderBoard(state.geometry);
   loadPreflight();
+  loadAdvice();
+}
+
+async function loadAdvice() {
+  // Cheap enough to run the moment a board is picked: the forced-bridge count
+  // comes from the netlist alone, so it needs no placement and no routing.
+  if (!state.python || !state.board) return;
+  const panel = $("advice");
+  const res = await window.api.advise({ python: state.python, board: state.board });
+  if (!res.ok) {
+    panel.hidden = true;
+    return;
+  }
+  const a = res.advice;
+  state.advice = a;
+  const label = {
+    single: "SINGLE-SIDED",
+    "single-with-bridges": "SINGLE-SIDED + bridges",
+    double: "DOUBLE-SIDED",
+  }[a.recommend] || a.recommend;
+  const badge = $("adviceBadge");
+  badge.textContent = label;
+  badge.className = "badge " + (a.recommend === "double" ? "badge-warn" : "badge-ok");
+
+  // The exact claim and the estimated one are shown as separate rows on
+  // purpose. Whether single-sided is POSSIBLE is decided from the netlist and
+  // holds for every placement; whether this placer will FIND it is a guess
+  // fitted to a small sample, and blurring the two is how a guess gets treated
+  // as a fact.
+  const rows = [
+    {
+      status: a.single_sided_possible ? "ok" : "warn",
+      label: a.single_sided_possible
+        ? "Single-sided is possible with zero wire bridges"
+        : `The circuit forces at least ${a.forced_bridges} wire bridge(s)`,
+      detail: "Exact — decided from the netlist, true for every placement.",
+    },
+    {
+      status: a.difficulty === "hard" ? "warn" : "ok",
+      label: `Difficulty: ${a.difficulty} (${a.parts} parts, ${a.nets} nets)`,
+      detail: "Estimated — whether this placer is likely to find it. Fitted to a small sample.",
+    },
+    {
+      status: "ok",
+      label: "Single-sided will be attempted either way",
+      detail: "The recommendation never skips the attempt; you decide from the result.",
+    },
+  ];
+  $("adviceRows").innerHTML = rows
+    .map(
+      (r) =>
+        `<li class="pf-row pf-${r.status}">` +
+        `<div class="pf-content">` +
+        `<span class="pf-label">${r.label}</span>` +
+        `<span class="pf-detail">${r.detail}</span>` +
+        `</div></li>`
+    )
+    .join("");
+  panel.hidden = false;
 }
 
 async function loadPreflight() {
@@ -621,6 +680,7 @@ async function run() {
     strategy: $("strategy").value,
     fab: $("fab").value,
     sides: parseInt($("sides").value, 10) || 2,
+    routeTopk: parseInt($("routeCheck").value, 10) || 0,
     count: 6,
   });
 

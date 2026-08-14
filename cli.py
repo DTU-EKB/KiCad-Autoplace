@@ -57,6 +57,7 @@ def _apply_pins(model, sc):
 def _place_opts():
     """Placement options from the environment, shared by every placing command.
 
+    STRATEGY=mixed  alternate force-directed and planar-embedding seeds by seed
     STRATEGY=topo   seed from a planar embedding instead of from spring forces
     CROSS_WEIGHT=n  charge n per net crossing when picking the layout to keep
     ORIENT=1        final pass that rotates parts to uncross nets (moves nothing)
@@ -103,8 +104,9 @@ def cmd_place(args):
     sc = _read_sidecar(in_path)
     connectors = sc.get("connectors")
     moved, locked = _apply_pins(model, sc)
+    from autoplace import multiseed
     opts = _place_opts()
-    opts["strategy"] = strategy
+    opts["strategy"] = multiseed.resolve_strategy(strategy, seed)
     report = engine.place(model, seed=seed, connectors=connectors,
                           margin=fabrication.margin_for(fab),
                           track=fabrication.track_for(fab), progress=progress,
@@ -440,15 +442,26 @@ def cmd_run(args):
     print(f"  advice: {adv.recommend}  ({adv.difficulty}, {adv.confidence})")
     for r in adv.reasons:
         print(f"    - {r}")
-    print(f"\nTrying single-sided across {seeds} placements "
-          f"(strategy={opts['strategy']}, orient={opts['orient_pass']})...")
+    # Alternate strategies across the seeds unless the caller pinned one.
+    # Neither dominates, measured on routed boards: the planar-embedding seed is
+    # the ONLY thing that reaches zero bridges on boost, mppt_buck and
+    # current_sense, and it is the WORSE choice on boost_v2 (2 bridges against
+    # the force-directed seed's 0). Picking either as the default would give up
+    # boards that currently come out perfect, so the honest answer is to run
+    # both and keep whichever routes better -- which is free here, since every
+    # seed is routed and compared anyway.
+    from autoplace import multiseed
+    strategy = os.environ.get("STRATEGY", "mixed")
+    plan = [(s, multiseed.resolve_strategy(strategy, s)) for s in range(seeds)]
+    shown = strategy if strategy != "mixed" else "mixed (auto + planar embedding)"
+    print(f"\nTrying single-sided across {seeds} placements (strategy={shown})...")
 
     work_dir = os.path.dirname(os.path.abspath(out_path)) or "."
     best = None
-    for seed in range(seeds):
+    for seed, strat in plan:
         cand = copy.deepcopy(model)
         engine.place(cand, seed=seed, connectors=connectors, margin=margin,
-                     track=track, **opts)
+                     track=track, **{**opts, "strategy": strat})
         work = os.path.join(work_dir, f"_run_s{seed}.kicad_pcb")
         kicad_io.apply_to_board(cand, pcb)
         pcbnew.SaveBoard(work, pcb)
@@ -466,23 +479,24 @@ def cmd_run(args):
         except Exception as exc:
             print(f"  seed {seed}: routing failed -- {exc}")
             continue
-        print(f"  seed {seed}: {bridges} wire bridge(s), {missing} still missing")
+        print(f"  seed {seed} ({strat}): {bridges} wire bridge(s), "
+              f"{missing} still missing")
         key = (missing, bridges)
         if best is None or key < best[0]:
-            best = (key, seed, bridges, missing, path)
+            best = (key, seed, bridges, missing, path, strat)
 
     if best is None:
         print("\nEvery placement failed to route. Nothing written.")
         return 1
 
-    _, seed, bridges, missing, path = best
+    _, seed, bridges, missing, path, strat = best
     for ext in (".kicad_pcb", ".kicad_pro"):
         src = os.path.splitext(path)[0] + ext
         if os.path.exists(src):
             shutil.copyfile(src, os.path.splitext(out_path)[0] + ext)
 
     v = advise.verdict(adv, closed=missing == 0, bridges=bridges, missing=missing)
-    print(f"\nBest: seed {seed} -> {out_path}")
+    print(f"\nBest: seed {seed} ({strat}) -> {out_path}")
     for r in v["reasons"]:
         print(f"  {r}")
     if not v["keep_single_sided"]:

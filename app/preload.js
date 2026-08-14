@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld("api", {
   cancelRun: () => ipcRenderer.invoke("cancel-run"),
   finalize: (opts) => ipcRenderer.invoke("finalize", opts),
   preflight: (opts) => ipcRenderer.invoke("preflight", opts),
+  advise: (opts) => ipcRenderer.invoke("advise", opts),
   checkRefineTools: () => ipcRenderer.invoke("check-refine-tools"),
   revealPath: (p) => ipcRenderer.invoke("reveal-path", p),
   devConfig: () => ipcRenderer.invoke("dev-config"),

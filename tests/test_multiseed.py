@@ -94,3 +94,35 @@ def test_bad_seed_does_not_abort(monkeypatch):
     assert "boom" in cands[1]["error"]
     assert cands[0]["seed"] == 0 and "board" in cands[0]   # others still produced
     assert cands[2]["seed"] == 2 and "board" in cands[2]
+
+
+# --- mixed strategy ---------------------------------------------------------
+# Neither seeding strategy dominates on routed boards: the planar embedding is
+# the only thing that reaches zero bridges on boost / mppt_buck / current_sense,
+# and it is the worse choice on boost_v2 (2 bridges against force-directed's 0).
+# So the gallery runs BOTH and lets the ranking pick, which costs nothing --
+# every candidate is scored anyway.
+
+def test_mixed_strategy_alternates_between_the_two_seeds():
+    from autoplace import multiseed as ms
+    got = [ms.resolve_strategy("mixed", s) for s in range(6)]
+    assert got == ["auto", "topo", "auto", "topo", "auto", "topo"]
+
+
+def test_a_pinned_strategy_is_used_for_every_seed():
+    from autoplace import multiseed as ms
+    assert [ms.resolve_strategy("topo", s) for s in range(3)] == ["topo"] * 3
+    assert [ms.resolve_strategy("auto", s) for s in range(3)] == ["auto"] * 3
+
+
+def test_mixed_actually_produces_two_different_layouts():
+    """If both halves came out identical the gallery would be wasting half its
+    candidates on a duplicate."""
+    import copy
+    from autoplace import engine, multiseed as ms
+    base = _board()
+    a, b = copy.deepcopy(base), copy.deepcopy(base)
+    engine.place(a, seed=0, strategy=ms.resolve_strategy("mixed", 0), sa_steps=200)
+    engine.place(b, seed=1, strategy=ms.resolve_strategy("mixed", 1), sa_steps=200)
+    assert [(c.ref, round(c.x, 3)) for c in a.components.values()] != \
+           [(c.ref, round(c.x, 3)) for c in b.components.values()]

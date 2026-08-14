@@ -52,7 +52,9 @@
               <div class="field">
                 <label for="strategy">Strategy</label>
                 <select id="strategy">
-                  <option value="auto" selected>Auto (recommended)</option>
+                  <option value="mixed" selected>Try both (recommended)</option>
+                  <option value="auto">Force-directed</option>
+                  <option value="topo">Planar embedding</option>
                   <option value="floorplan">Floorplan (hierarchical)</option>
                   <option value="compact">Compact (force-directed)</option>
                 </select>
@@ -77,6 +79,13 @@
                   <option value="quick">Quick (~3 routes)</option>
                   <option value="normal" selected>Normal (~5 routes)</option>
                   <option value="thorough">Thorough (~10 routes)</option>
+                </select>
+              </div>
+              <div class="field mt-3">
+                <label for="routeCheck">Gallery route-check</label>
+                <select id="routeCheck">
+                  <option value="0" selected>Off — rank by proxy metrics</option>
+                  <option value="2">Route top 2 candidates (slower, needs Java)</option>
                 </select>
               </div>
             </div>
@@ -118,6 +127,17 @@
           </section>
 
           <!-- Preflight Card -->
+          <section id="advice" class="card preflight-card" hidden>
+            <div class="card-header">
+              <div class="header-title">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 L2 7 l10 5 10-5 z"></path><path d="M2 17 l10 5 10-5"></path><path d="M2 12 l10 5 10-5"></path></svg>
+                <h2>Single- or double-sided?</h2>
+              </div>
+              <span id="adviceBadge" class="badge"></span>
+            </div>
+            <ul id="adviceRows" class="pf-rows"></ul>
+          </section>
+
           <section id="preflight" class="card preflight-card" hidden>
             <div class="card-header">
               <div class="header-title">

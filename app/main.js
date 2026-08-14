@@ -201,6 +201,10 @@ function runPlace(win, { board, python, strategy, seed, fab }) {
     const env = {
       ...process.env,
       AUTOPLACE_STREAM: "1",
+      // "mixed" is passed straight through: multiseed.resolve_strategy
+      // alternates the two seeding strategies per seed. Doing it here instead
+      // would silently pin the gallery to one of them, since place-multi runs
+      // its seeds internally and this sees only one seed value.
       STRATEGY: strategy || "auto",
       FAB: fab || "cnc",
     };
@@ -274,7 +278,7 @@ function runPlace(win, { board, python, strategy, seed, fab }) {
   });
 }
 
-function runPlaceMulti(win, { board, python, strategy, count, fab, sides }) {
+function runPlaceMulti(win, { board, python, strategy, count, fab, sides, routeTopk }) {
   return new Promise((resolve) => {
     if (!fs.existsSync(CLI_PY)) {
       return resolve({ ok: false, error: `cli.py not found at ${CLI_PY}` });
@@ -285,8 +289,13 @@ function runPlaceMulti(win, { board, python, strategy, count, fab, sides }) {
     };
     const env = {
       ...process.env, AUTOPLACE_STREAM: "1",
+      // "mixed" is passed straight through: multiseed.resolve_strategy
+      // alternates the two seeding strategies per seed. Doing it here instead
+      // would silently pin the gallery to one of them, since place-multi runs
+      // its seeds internally and this sees only one seed value.
       STRATEGY: strategy || "auto", FAB: fab || "cnc",
-      SIDES: String(sides || 2),   // gallery routed-% chips match the fab target
+      SIDES: String(sides || 2),      // gallery routed-% chips match the fab target
+      ROUTE_TOPK: String(routeTopk ?? 0), // 0 = never start FreeRouting from Place
     };
     const args = [CLI_PY, "place-multi", board, String(n)];
     send({ type: "log", line: `$ ${python} cli.py place-multi "${board}" ${n}` });
@@ -461,7 +470,9 @@ function runCliJson(python, args) {
     }
     let proc;
     try {
-      proc = spawn(python, [CLI_PY, ...args], { cwd: RUN_CWD });
+      proc = spawn(python, [CLI_PY, ...args], {
+        cwd: RUN_CWD, env: { ...process.env, AUTOPLACE_STREAM: "1" },
+      });
     } catch (e) {
       return resolve({ ok: false, error: String(e) });
     }
@@ -565,6 +576,16 @@ function registerIpc(win) {
   ipcMain.handle("run-refine", (_e, opts) => runRefine(win, opts));
 
   ipcMain.handle("finalize", (_e, opts) => runFinalize(win, opts));
+
+  // Single- vs double-sided advice for the loaded board. Cheap (no routing):
+  // the forced-bridge count comes from the netlist alone, so it is worth
+  // showing the moment a board is picked rather than after a route.
+  ipcMain.handle("advise", async (_e, { python, board }) => {
+    const res = await runCliJson(python, ["advise", board]);
+    if (!res.ok) return res;
+    const a = res.objs.find((o) => o.type === "advice");
+    return a ? { ok: true, advice: a } : { ok: false, error: "no advice result" };
+  });
 
   ipcMain.handle("preflight", async (_e, { python, board }) => {
     const res = await runCliJson(python, ["preflight", board]);
