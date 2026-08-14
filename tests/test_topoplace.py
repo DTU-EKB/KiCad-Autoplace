@@ -255,6 +255,28 @@ def test_engine_keep_strategy_starts_from_the_given_positions():
     assert {c.ref for c in b.components.values()} == {c.ref for c in a.components.values()}
 
 
+def test_engine_can_run_the_orientation_pass():
+    """Rotating parts to uncross nets moves nothing and cannot create an
+    overlap, so it belongs at the very end -- after legalize and align, where
+    the positions are already final."""
+    from autoplace import engine, orient
+    b = _mesh()
+    engine.place(b, seed=0, sa_steps=200, orient_pass=True, aesthetic=False)
+    for c in b.components.values():
+        assert b.x0 <= c.left and c.right <= b.x1
+    # and it really ran: a second pass on the result finds nothing left to turn
+    assert orient.optimise(b)["rotated"] == []
+
+
+def test_engine_orientation_pass_is_off_by_default():
+    from autoplace import engine
+    a, b = _mesh(), _mesh()
+    engine.place(a, seed=1, sa_steps=200, aesthetic=False)
+    engine.place(b, seed=1, sa_steps=200, orient_pass=False, aesthetic=False)
+    assert [(c.ref, c.x, c.y, c.rot) for c in a.components.values()] == \
+           [(c.ref, c.x, c.y, c.rot) for c in b.components.values()]
+
+
 def test_oversized_parts_are_still_kept_in_bounds():
     """Scaling has to account for footprint size, not just centre points."""
     b = _board(_part("BIG0", "A", "B", w=40.0, h=30.0),

@@ -54,6 +54,23 @@ def _apply_pins(model, sc):
                               locked=sc.get("locked"))
 
 
+def _place_opts():
+    """Placement options from the environment, shared by every placing command.
+
+    STRATEGY=topo   seed from a planar embedding instead of from spring forces
+    CROSS_WEIGHT=n  charge n per net crossing when picking the layout to keep
+    ORIENT=1        final pass that rotates parts to uncross nets (moves nothing)
+
+    All default to the historical behaviour, so an unset environment reproduces
+    previous results exactly.
+    """
+    return {
+        "strategy": os.environ.get("STRATEGY", "auto"),
+        "cross_weight": float(os.environ.get("CROSS_WEIGHT", "0")),
+        "orient_pass": os.environ.get("ORIENT", "0") == "1",
+    }
+
+
 def cmd_place(args):
     in_path = args[0]
     out_path = args[1] if len(args) > 1 else _default_out(in_path)
@@ -86,10 +103,12 @@ def cmd_place(args):
     sc = _read_sidecar(in_path)
     connectors = sc.get("connectors")
     moved, locked = _apply_pins(model, sc)
-    report = engine.place(model, seed=seed, strategy=strategy,
-                          connectors=connectors, margin=fabrication.margin_for(fab),
+    opts = _place_opts()
+    opts["strategy"] = strategy
+    report = engine.place(model, seed=seed, connectors=connectors,
+                          margin=fabrication.margin_for(fab),
                           track=fabrication.track_for(fab), progress=progress,
-                          aesthetic=aesthetic)
+                          aesthetic=aesthetic, **opts)
     report["pinned"] = {"moved": moved, "locked": locked}
     kicad_io.apply_placement(model, pcb, out_path)
     # carry the project file so net-class (track/clearance) rules survive: the
@@ -381,6 +400,97 @@ def cmd_feasibility(args):
     return 0
 
 
+def cmd_run(args):
+    """Place and route a board single-sided, end to end, and say how it went.
+
+      cli.py run BOARD.kicad_pcb [OUT.kicad_pcb] [seeds]
+
+    The one command to try the whole thing. It advises single- vs double-sided,
+    then attempts single-sided ANYWAY across several placements -- advice is not
+    a gate, and an attempt is fact where advice is only a prediction -- keeps the
+    best, and reports the wire bridges it needed against the number the circuit
+    forces. Nothing is hidden: if it could not finish, it says so.
+
+    Env: SEEDS, FAB (cnc|laser), MAX_BRIDGES, ROUTE_PASSES, and the placement
+    knobs from ``_place_opts`` (STRATEGY / CROSS_WEIGHT / ORIENT).
+    """
+    import copy
+    import shutil
+
+    import pcbnew
+
+    from autoplace import (advise, fabrication, planarity, routing, unrouted)
+
+    in_path = args[0]
+    out_path = args[1] if len(args) > 1 else _default_out(in_path)
+    seeds = int(args[2]) if len(args) > 2 else int(os.environ.get("SEEDS", "4"))
+    fab = _fab()
+    jar = os.environ.get("FREEROUTING_JAR", DEFAULT_JAR)
+    passes = int(os.environ.get("ROUTE_PASSES", "10"))
+    margin, track = fabrication.margin_for(fab), fabrication.track_for(fab)
+    opts = _place_opts()
+
+    model, pcb = kicad_io.load_board(in_path)
+    sc = _read_sidecar(in_path)
+    connectors = sc.get("connectors")
+    _apply_pins(model, sc)
+
+    adv = advise.assess(model, max_bridges=int(os.environ.get("MAX_BRIDGES", "4")))
+    print(f"{os.path.basename(in_path)}: {adv.parts} parts, {adv.nets} nets")
+    print(f"  advice: {adv.recommend}  ({adv.difficulty}, {adv.confidence})")
+    for r in adv.reasons:
+        print(f"    - {r}")
+    print(f"\nTrying single-sided across {seeds} placements "
+          f"(strategy={opts['strategy']}, orient={opts['orient_pass']})...")
+
+    work_dir = os.path.dirname(os.path.abspath(out_path)) or "."
+    best = None
+    for seed in range(seeds):
+        cand = copy.deepcopy(model)
+        engine.place(cand, seed=seed, connectors=connectors, margin=margin,
+                     track=track, **opts)
+        work = os.path.join(work_dir, f"_run_s{seed}.kicad_pcb")
+        kicad_io.apply_to_board(cand, pcb)
+        pcbnew.SaveBoard(work, pcb)
+        kicad_io.copy_project(in_path, work)
+        _apply_fab(work, fab)
+        try:
+            r1 = routing.route_once(work, jar, passes, sides=1)
+            missing = len(unrouted.analyse(r1["routed_pcb"])["missing"])
+            bridges, path = 0, r1["routed_pcb"]
+            if missing:
+                r2 = routing.route_stage2_bridges(r1["routed_pcb"], jar, passes)
+                bridges = r2["bridges"]
+                missing = len(unrouted.analyse(r2["routed_pcb"])["missing"])
+                path = r2["routed_pcb"]
+        except Exception as exc:
+            print(f"  seed {seed}: routing failed -- {exc}")
+            continue
+        print(f"  seed {seed}: {bridges} wire bridge(s), {missing} still missing")
+        key = (missing, bridges)
+        if best is None or key < best[0]:
+            best = (key, seed, bridges, missing, path)
+
+    if best is None:
+        print("\nEvery placement failed to route. Nothing written.")
+        return 1
+
+    _, seed, bridges, missing, path = best
+    for ext in (".kicad_pcb", ".kicad_pro"):
+        src = os.path.splitext(path)[0] + ext
+        if os.path.exists(src):
+            shutil.copyfile(src, os.path.splitext(out_path)[0] + ext)
+
+    v = advise.verdict(adv, closed=missing == 0, bridges=bridges, missing=missing)
+    print(f"\nBest: seed {seed} -> {out_path}")
+    for r in v["reasons"]:
+        print(f"  {r}")
+    if not v["keep_single_sided"]:
+        print(f"\n  Next step: re-run with two layers (SIDES=2 cli.py complete), "
+              f"or accept the bridges above.")
+    return 0 if missing == 0 else 1
+
+
 def cmd_advise(args):
     """Single-sided or double-sided for this board, and why.
 
@@ -520,7 +630,8 @@ def main(argv):
             "metrics": cmd_metrics, "dump": cmd_dump, "refine": cmd_refine,
             "complete": cmd_complete,
             "finalize": cmd_finalize, "preflight": cmd_preflight,
-            "feasibility": cmd_feasibility, "advise": cmd_advise}
+            "feasibility": cmd_feasibility, "advise": cmd_advise,
+            "run": cmd_run}
     if len(argv) < 2 or argv[1] not in cmds:
         print(__doc__)
         return 2
